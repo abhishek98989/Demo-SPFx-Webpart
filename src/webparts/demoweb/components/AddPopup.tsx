@@ -8,7 +8,7 @@ export const AddPopup = (props: any) => {
     thing: '',
     animal: ''
   });
-  const saveData = () => {
+  const saveData = (popupVal:any) => {
     props.addFunc(popupVal);
     setPopVal({
       name: '',
@@ -27,35 +27,30 @@ export const AddPopup = (props: any) => {
     })
   }
   const onRenderFooterContent = React.useCallback(
-    () => (
+    (popupVal) => (
       <div>
-        <PrimaryButton onClick={saveData} >
+        <PrimaryButton onClick={()=>saveData(popupVal)} >
           Save
         </PrimaryButton>
-        <DefaultButton onClick={cancel}>Cancel</DefaultButton>
+        <DefaultButton onClick={()=>cancel()}>Cancel</DefaultButton>
       </div>
     ),
     [],
   );
-  const update = (e:any,poperty:any) => {
-    let SaveVal :any= popupVal
-    SaveVal[poperty]=e?.target?.value;
-    setPopVal(SaveVal);
-  }
   return (
     <Panel
       isOpen={true}
       headerText="Add Data Popup"
       closeButtonAriaLabel="Close"
-      onRenderFooterContent={onRenderFooterContent}
+      onRenderFooterContent={()=>onRenderFooterContent(popupVal)}
       // Stretch panel content to fill the available height so the footer is positioned
       // at the bottom of the page
       isFooterAtBottom={true}
     >
-      <input placeholder='Enter Name' value={popupVal.name} onChange={(e) => update( e,'name')} type="text" />
-      <input placeholder='Enter Place' value={popupVal.place} onChange={(e) =>  update( e,'place')} type="text" />
-      <input placeholder='Enter Thing' value={popupVal.thing} onChange={(e) => update( e,'thing')} type="text" />
-      <input placeholder='Enter Animal' value={popupVal.animal} onChange={(e) =>  update( e,'animal')} type="text" />
+      <input placeholder='Enter Name' value={popupVal.name} onChange={(e) => setPopVal({ ...popupVal, name: e?.target?.value })} type="text" />
+      <input placeholder='Enter Place' value={popupVal.place} onChange={(e) => setPopVal({ ...popupVal, place: e?.target?.value })} type="text" />
+      <input placeholder='Enter Thing' value={popupVal.thing} onChange={(e) => setPopVal({ ...popupVal, thing: e?.target?.value })} type="text" />
+      <input placeholder='Enter Animal' value={popupVal.animal} onChange={(e) => setPopVal({ ...popupVal, animal: e?.target?.value })} type="text" />
     </Panel>
   )
 }
