@@ -14,7 +14,7 @@ export default class Demoweb extends React.Component<IDemowebProps, {}> {
     } = this.props;
 
     return (
-      <NewReactapp/>
+      <NewReactapp Context={this.props.Context}/>
     );
   }
 }

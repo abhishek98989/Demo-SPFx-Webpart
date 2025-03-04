@@ -1,6 +1,6 @@
 import * as React from 'react';
 import * as ReactDom from 'react-dom';
-import { Version } from '@microsoft/sp-core-library';
+import { Version} from '@microsoft/sp-core-library';
 import {
   type IPropertyPaneConfiguration,
   PropertyPaneTextField
@@ -14,6 +14,7 @@ import { IDemowebProps } from './components/IDemowebProps';
 
 export interface IDemowebWebPartProps {
   description: string;
+  Context: any;
 }
 
 export default class DemowebWebPart extends BaseClientSideWebPart<IDemowebWebPartProps> {
@@ -29,7 +30,8 @@ export default class DemowebWebPart extends BaseClientSideWebPart<IDemowebWebPar
         isDarkTheme: this._isDarkTheme,
         environmentMessage: this._environmentMessage,
         hasTeamsContext: !!this.context.sdks.microsoftTeams,
-        userDisplayName: this.context.pageContext.user.displayName
+        userDisplayName: this.context.pageContext.user.displayName,
+        Context: this.context
       }
     );
 
