@@ -71,7 +71,7 @@ export const NewReactapp = (props: any) => {
   const getItemsfromList = async () => {
     // Fetch list items
     const sp = spfi().using(SPFx(props.Context));
-    const items: any = await sp.web.lists.getById('ccc4bcb8-3a9d-4031-bc70-4c267b1ef3ca').items.select("Title,Place,Thing,Animal,Id")();
+    const items: any = await sp.web.lists.getById('ccc4bcb8-3a9d-4031-bc70-4c267b1ef3ca').items.select("Title,Place,Thing,Animal,Id").filter<any>(f => f.text("Animal").equals("Dog").or().text('Place').equals('Noida'))();
     if (items?.length > 0) {
       setGameValues(items);
     }
