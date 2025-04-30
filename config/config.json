@@ -9,10 +9,20 @@
           "manifest": "./src/webparts/demoweb/DemowebWebPart.manifest.json"
         }
       ]
+    },
+    "learner-blog-post-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/learnerBlogPost/LearnerBlogPostWebPart.js",
+          "manifest": "./src/webparts/learnerBlogPost/LearnerBlogPostWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},
   "localizedResources": {
-    "DemowebWebPartStrings": "lib/webparts/demoweb/loc/{locale}.js"
+    "DemowebWebPartStrings": "lib/webparts/demoweb/loc/{locale}.js",
+    "ControlStrings": "node_modules/@pnp/spfx-controls-react/lib/loc/{locale}.js",
+    "LearnerBlogPostWebPartStrings": "lib/webparts/learnerBlogPost/loc/{locale}.js"
   }
 }

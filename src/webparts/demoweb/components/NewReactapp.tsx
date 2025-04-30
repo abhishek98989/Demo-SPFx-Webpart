@@ -1,111 +1,136 @@
-import React from 'react'
-import $ from 'jquery'
-import { AddPopup } from './AddPopup';
-import { set } from '@microsoft/sp-lodash-subset';
-import { spfi, SPFx } from "@pnp/sp";
-import "@pnp/sp/webs";
-import "@pnp/sp/lists";
-import "@pnp/sp/items";
-import { PrimaryButton } from '@fluentui/react';
-export const NewReactapp = (props: any) => {
-  const [val, setVal] = React.useState(0);
+import * as React from "react";
+import { useEffect, useState, useRef } from "react";
+import { TextField, Stack, DefaultButton, Label, IconButton } from "@fluentui/react";
+import { spfi,SPFx } from "@pnp/sp/presets/all";
 
-  const [isPopupOpen, setIsPopupOpen] = React.useState(false);
-  const [gameValues, setGameValues] = React.useState([{
-    Title: "Abhishek",
-    Place: "Noida",
-    Thing: "Spfx",
-    Animal: "Animal"
-  }]);
-  const [editItem, setEditItem]: any = React.useState(undefined);
-  const [editIndex, setEditIndex] = React.useState(0);
-  const update = () => {
-    setVal(20);
-  } 
-  React.useEffect(() => {
-    getItemsfromList();
+interface IBlogPost {
+  Id: number;
+  Title: string;
+  Author: string;
+  PublishedDate: string;
+  Categories: string[];
+  Url: string;
+}
+
+const BlogPosts: React.FC = (props:any) => {
+  const [posts, setPosts] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<number[]>([]);
+  const [currentResultIndex, setCurrentResultIndex] = useState<number>(0);
+  const resultsRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    const sp = spfi().using(SPFx(props.context));
+    const fetchPosts = async () => {
+      const items = await sp.web.lists.getById("6991af0c-d310-4590-bbd2-2e25cd59eebd").items.select("Id", "Title", "Author/Title", "Created", "Body", "EncodedAbsUrl").expand("Author")();
+      const mappedPosts = items.map((item: any) => ({
+        Id: item.Id,
+        Title: item.Title,
+        Author: item.Author?.Title || "",
+        PublishedDate: new Date(item.Created).toLocaleDateString(),
+        // Categories: item.Categories?.split(";") || [],
+        Url: item.EncodedAbsUrl
+      }));
+      setPosts(mappedPosts);
+    };
+
+    fetchPosts();
   }, []);
 
-  const addData = (data: any) => {
-    let gameData = gameValues;
-    gameData.push(data);
-    setGameValues(gameData);
-    // getItemsfromList();
-    // setGameValues([...gameValues, data]);
-    // setGameValues((prev) => [...prev, data]);
-    setIsPopupOpen(false);
-  }
-  const closePopup = () => {
-    setIsPopupOpen(false);
-  }
-  // const editFunc = (item:any,index:number) => {
-  const editFunc = (item: any) => {
-    setIsPopupOpen(true);
-    setEditItem(item);
-  }
-  const editCallback = (data: any) => {
-    let gameData = gameValues;
-    // gameData[editIndex] = data;
-    gameData = gameData?.map((item: any) => {
-      if (item.Id == editItem.Id) {
-        return { ...item, ...data };
-      } else {
-        return item;
+  const handleSearch = (text: string) => {
+    setSearchQuery(text);
+    const matches = posts.reduce<number[]>((acc, post, idx) => {
+      const content = `${post.Title} ${post.Author} ${post.PublishedDate} ${post.Categories.join(" ")}`.toLowerCase();
+      if (content.includes(text.toLowerCase())) {
+        acc.push(idx);
       }
-    })
-    setGameValues(gameData);
-    setIsPopupOpen(false);
-    setEditItem(undefined);
-    // getItemsfromList();
-    // setEditIndex(0);
-  }
-  const DeleteCallback = () => {
-    let gameData = gameValues;
-    gameData = gameData?.filter((item: any) => item.Id != editItem.Id)
-    setGameValues(gameData);
-    setIsPopupOpen(false);
-    setEditItem(undefined);
-    // getItemsfromList();
-    // setEditIndex(0);
-  }
-  const getItemsfromList = async () => {
-    // Fetch list items
-    const sp = spfi().using(SPFx(props.Context));
-    const items: any = await sp.web.lists.getById('ccc4bcb8-3a9d-4031-bc70-4c267b1ef3ca').items.select("Title,Place,Thing,Animal,Id").filter<any>(f => f.text("Animal").equals("Dog").or().text('Place').equals('Noida'))();
-    if (items?.length > 0) {
-      setGameValues(items);
+      return acc;
+    }, []);
+    setSearchResults(matches);
+    setCurrentResultIndex(0);
+
+    if (matches.length && resultsRefs.current[matches[0]]) {
+      resultsRefs.current[matches[0]]?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-    console.log(items);
-  }
+  };
+
+  const highlightText = (text: string) => {
+    if (!searchQuery) return text;
+    const parts = text.split(new RegExp(`(${searchQuery})`, "gi"));
+    return parts.map((part, index) => (
+      part.toLowerCase() === searchQuery.toLowerCase() ? <mark key={index}>{part}</mark> : part
+    ));
+  };
+
+  const moveToNext = () => {
+    if (searchResults.length === 0) return;
+    const nextIndex = (currentResultIndex + 1) % searchResults.length;
+    setCurrentResultIndex(nextIndex);
+    const postIndex = searchResults[nextIndex];
+    resultsRefs.current[postIndex]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const moveToPrev = () => {
+    if (searchResults.length === 0) return;
+    const prevIndex = (currentResultIndex - 1 + searchResults.length) % searchResults.length;
+    setCurrentResultIndex(prevIndex);
+    const postIndex = searchResults[prevIndex];
+    resultsRefs.current[postIndex]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   return (
-    <>
-      <div className="">
-        <PrimaryButton onClick={() => setIsPopupOpen(true)} >
-          Add Data
-        </PrimaryButton>
-        <table>
-          <tr>
-            <th>Name</th>
-            <th>Place</th>
-            <th>Thing</th>
-            <th>Animal</th>
-            <th>Edit</th>
-          </tr>
-          {gameValues.map((item, index) => {
-            return (
-              <tr>
-                <td>{item.Title}</td>
-                <td>{item.Place}</td>
-                <td>{item.Thing}</td>
-                <td>{item.Animal}</td>
-                {/* <td onClick={()=>editFunc(item,index)}>{'=>'}</td> */}
-                <td onClick={() => editFunc(item)}>{'=>'}</td>
-              </tr>
-            )
-          })}
-        </table>
-      </div>
-      {isPopupOpen == true && <AddPopup closeFunc={closePopup} editCallback={editCallback} DeleteCallback={DeleteCallback} Context={props?.Context} item={editItem} addFunc={addData} />}
-    </>
-  )
-}
+    <Stack tokens={{ childrenGap: 10 }} styles={{ root: { padding: 20 } }}>
+      <TextField
+        label="Search"
+        value={searchQuery}
+        onChange={(_, newValue) => handleSearch(newValue || "")}
+        onRenderSuffix={() => (
+          <>
+            <IconButton iconProps={{ iconName: "Up" }} onClick={moveToPrev} disabled={searchResults.length === 0} />
+            <IconButton iconProps={{ iconName: "Down" }} onClick={moveToNext} disabled={searchResults.length === 0} />
+          </>
+        )}
+      />
+      <Label>
+        {searchResults.length > 0
+          ? `Match ${currentResultIndex + 1} of ${searchResults.length}`
+          : "No matches"}
+      </Label>
+
+      {posts.map((post, index) => {
+        const isHighlighted = searchResults.includes(index);
+        return (
+          <div
+            key={post.Id}
+            ref={el => resultsRefs.current[index] = el}
+            style={{
+              border: "1px solid #ccc",
+              borderRadius: 4,
+              padding: 15,
+              marginBottom: 10,
+              backgroundColor: isHighlighted ? "#f5f5f5" : "white"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: "18px", fontWeight: 600 }}>
+                <a href={post.Url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                  {highlightText(post.Title)}
+                </a>
+              </div>
+            </div>
+            <div style={{ fontSize: "14px", color: "#666" }}>
+              <span>By {highlightText(post.Author)} on {highlightText(post.PublishedDate)}</span>
+            </div>
+            {/* <div style={{ marginTop: 5 }}>
+              Categories: {post.Categories.map((cat, idx) => (
+                <span key={idx} style={{ marginRight: 5 }}>{highlightText(cat)}</span>
+              ))}
+            </div> */}
+          </div>
+        );
+      })}
+    </Stack>
+  );
+};
+
+export default BlogPosts;

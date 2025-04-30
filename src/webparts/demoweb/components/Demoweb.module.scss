@@ -1,34 +1,134 @@
-@import '~@fluentui/react/dist/sass/References.scss';
+/* Custom Comment Card Styles */
+.commentsContainer {
+  padding: 16px 0;
 
-.demoweb {
+  .commentsHeader {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  .addCommentSection {
+    margin-bottom: 24px;
+    border: 1px solid #edebe9;
+    border-radius: 4px;
+    padding: 16px;
+    background-color: #f9f9f9;
+  }
+
+  .addCommentButtonContainer {
+    margin-top: 12px;
+  }
+
+  .commentsList {
+    margin-top: 16px;
+  }
+
+  .noComments {
+    color: #666;
+    font-style: italic;
+    padding: 16px 0;
+  }
+
+  .commentCardWrapper {
+    margin-bottom: 24px;
+  }
+
+  .commentCard {
+    background-color: #f9f9f9;
+    border: 1px solid #edebe9;
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 8px;
+  }
+
+  .replyCard {
+    background-color: #f3f2f1;
+    border: 1px solid #edebe9;
+    border-radius: 4px;
+    padding: 16px;
+    margin-left: 32px;
+    margin-bottom: 8px;
+  }
+
+  .commentHeader {
+    margin-bottom: 12px;
+  }
+
+  .commentContent {
+    margin: 12px 0;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  .commentActions {
+    display: flex;
+    margin-top: 8px;
+  }
+
+  .replyInputContainer {
+    margin-left: 32px;
+    margin-bottom: 12px;
+    padding: 12px;
+    background-color: #f3f2f1;
+    border: 1px solid #edebe9;
+    border-radius: 4px;
+  }
+
+  .replyInput {
+    margin-bottom: 8px;
+  }
+
+  .replyButtonContainer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .repliesContainer {
+    margin-left: 32px;
+  }
+
+  .replyCardWrapper {
+    margin-bottom: 8px;
+  }
+
+  .error {
+    color: #a4262c;
+    padding: 16px;
+    border: 1px solid #f1707b;
+    background-color: #fed9cc;
+    border-radius: 4px;
+  }
+
+  .warning {
+    color: #8a5300;
+    padding: 12px;
+    border: 1px solid #ffd77d;
+    background-color: #fff4cf;
+    border-radius: 4px;
+    margin-bottom: 16px;
+  }
+}
+
+/* General Webpart Styles */
+.listItemComments {
   overflow: hidden;
   padding: 1em;
   color: "[theme:bodyText, default: #323130]";
   color: var(--bodyText);
-  &.teams {
-    font-family: $ms-font-family-fallbacks;
-  }
 }
 
 .welcome {
-  text-align: center;
+  text-align: left;
+  margin-bottom: 20px;
 }
 
-.welcomeImage {
-  width: 100%;
-  max-width: 420px;
+.container {
+  max-width: 800px;
+  margin: 0 auto;
 }
 
-.links {
-  a {
-    text-decoration: none;
-    color: "[theme:link, default:#03787c]";
-    color: var(--link); // note: CSS Custom Properties support is limited to modern browsers only
-
-    &:hover {
-      text-decoration: underline;
-      color: "[theme:linkHovered, default: #014446]";
-      color: var(--linkHovered); // note: CSS Custom Properties support is limited to modern browsers only
-    }
-  }
+.teams {
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif;
 }

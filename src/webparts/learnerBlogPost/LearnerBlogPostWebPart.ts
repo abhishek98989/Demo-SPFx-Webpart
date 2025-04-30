@@ -1,43 +1,36 @@
-
-// src/webparts/listItemComments/ListItemCommentsWebPart.ts
 import * as React from 'react';
 import * as ReactDom from 'react-dom';
 import { Version } from '@microsoft/sp-core-library';
 import {
-  IPropertyPaneConfiguration,
+  type IPropertyPaneConfiguration,
   PropertyPaneTextField
 } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 
-import * as strings from 'DemowebWebPartStrings';
-import ListItemComments from './components/ListItemComments';
-import { IListItemCommentsProps } from './components/IDemowebProps';
+import * as strings from 'LearnerBlogPostWebPartStrings';
+import LearnerBlogPost from './components/LearnerBlogPost';
+import { ILearnerBlogPostProps } from './components/ILearnerBlogPostProps';
 
-export interface IListItemCommentsWebPartProps {
-  listName: string;
-  itemIdParameter: string;
+export interface ILearnerBlogPostWebPartProps {
+  description: string;
 }
 
-export default class ListItemCommentsWebPart extends BaseClientSideWebPart<IListItemCommentsWebPartProps> {
+export default class LearnerBlogPostWebPart extends BaseClientSideWebPart<ILearnerBlogPostWebPartProps> {
+
   private _isDarkTheme: boolean = false;
   private _environmentMessage: string = '';
 
   public render(): void {
-    // Get item ID from query parameters
-    const queryParams = new URLSearchParams(window.location.search);
-    const itemId = queryParams.get(this.properties.itemIdParameter || 'ID');
-
-    const element: React.ReactElement<IListItemCommentsProps> = React.createElement(
-      ListItemComments,
+    const element: React.ReactElement<ILearnerBlogPostProps> = React.createElement(
+      LearnerBlogPost,
       {
-        listName: this.properties.listName,
-        itemId: itemId ? parseInt(itemId) : null,
+        description: this.properties.description,
         isDarkTheme: this._isDarkTheme,
         environmentMessage: this._environmentMessage,
         hasTeamsContext: !!this.context.sdks.microsoftTeams,
         userDisplayName: this.context.pageContext.user.displayName,
-        context: this.context
+        Context: this.context,
       }
     );
 
@@ -49,6 +42,8 @@ export default class ListItemCommentsWebPart extends BaseClientSideWebPart<IList
       this._environmentMessage = message;
     });
   }
+
+
 
   private _getEnvironmentMessage(): Promise<string> {
     if (!!this.context.sdks.microsoftTeams) { // running in Teams, office.com or Outlook
@@ -62,9 +57,12 @@ export default class ListItemCommentsWebPart extends BaseClientSideWebPart<IList
             case 'Outlook': // running in Outlook
               environmentMessage = this.context.isServedFromLocalhost ? strings.AppLocalEnvironmentOutlook : strings.AppOutlookEnvironment;
               break;
-         
+            case 'Teams': // running in Teams
+            case 'TeamsModern':
+              environmentMessage = this.context.isServedFromLocalhost ? strings.AppLocalEnvironmentTeams : strings.AppTeamsTabEnvironment;
+              break;
             default:
-              throw new Error('Unknown host');
+              environmentMessage = strings.UnknownEnvironment;
           }
 
           return environmentMessage;
@@ -89,6 +87,7 @@ export default class ListItemCommentsWebPart extends BaseClientSideWebPart<IList
       this.domElement.style.setProperty('--link', semanticColors.link || null);
       this.domElement.style.setProperty('--linkHovered', semanticColors.linkHovered || null);
     }
+
   }
 
   protected onDispose(): void {
@@ -110,13 +109,8 @@ export default class ListItemCommentsWebPart extends BaseClientSideWebPart<IList
             {
               groupName: strings.BasicGroupName,
               groupFields: [
-                PropertyPaneTextField('listName', {
-                  label: 'ListNameFieldLabel'
-                }),
-                PropertyPaneTextField('itemIdParameter', {
-                  label: 'ItemIdParameterFieldLabel',
-                  description: 'Query parameter name for item ID (default: ID)',
-                  value: 'ID'
+                PropertyPaneTextField('description', {
+                  label: strings.DescriptionFieldLabel
                 })
               ]
             }
