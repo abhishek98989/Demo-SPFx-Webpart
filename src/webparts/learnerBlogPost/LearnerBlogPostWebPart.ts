@@ -14,6 +14,8 @@ import { ILearnerBlogPostProps } from './components/ILearnerBlogPostProps';
 
 export interface ILearnerBlogPostWebPartProps {
   description: string;
+  categoriesListId: string;
+postsListId: string;
 }
 
 export default class LearnerBlogPostWebPart extends BaseClientSideWebPart<ILearnerBlogPostWebPartProps> {
@@ -31,6 +33,8 @@ export default class LearnerBlogPostWebPart extends BaseClientSideWebPart<ILearn
         hasTeamsContext: !!this.context.sdks.microsoftTeams,
         userDisplayName: this.context.pageContext.user.displayName,
         Context: this.context,
+        categoriesListId: this.properties.categoriesListId,
+        postsListId: this.properties.postsListId,
       }
     );
 
@@ -111,6 +115,12 @@ export default class LearnerBlogPostWebPart extends BaseClientSideWebPart<ILearn
               groupFields: [
                 PropertyPaneTextField('description', {
                   label: strings.DescriptionFieldLabel
+                }),
+                PropertyPaneTextField('categoriesListId', {
+                  label:'categoriesListId'
+                }),
+                PropertyPaneTextField('postsListId', {
+                  label: 'postsListId'
                 })
               ]
             }

@@ -5,4 +5,6 @@ export interface ILearnerBlogPostProps {
   hasTeamsContext: boolean;
   userDisplayName: string;
   Context:any
+  categoriesListId: string;
+  postsListId: string;
 }

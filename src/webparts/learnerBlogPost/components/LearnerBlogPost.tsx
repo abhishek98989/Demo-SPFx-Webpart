@@ -15,7 +15,7 @@ export default class LearnerBlogPost extends React.Component<ILearnerBlogPostPro
     } = this.props;
 
     return (
-    <BlogPosts Context={this.props.Context}/>
+    <BlogPosts Context={this.props.Context} PostsListId={this?.props?.postsListId} CategoriesListId={this.props?.categoriesListId}/>
     );
   }
 }
