@@ -43,6 +43,11 @@ const BlogPosts = (props: any) => {
   const loaderRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
 
+  // Helper function to sort posts by date (newest first)
+  const sortByDate = (array: IBlogPost[]) => {  
+    return [...array].sort((a, b) => new Date(b?.PublishedDate).getTime() - new Date(a?.PublishedDate).getTime());
+  };
+
   // Fetch posts from SharePoint
   const fetchPosts = async (sp: any) => {
     try {
@@ -70,13 +75,14 @@ const BlogPosts = (props: any) => {
           PublishedDateAndMonth: monthDate,
           PublishedTime: time,
           Author: item.Author?.Title || "",
-          PublishedDate: new Date(item.Created).toLocaleDateString(),
+          PublishedDate: item.PublishedDate,
           Categories: item.PostCategory ? item.PostCategory : [],
           Url: item.EncodedAbsUrl || "",
           Body: item.Body || "",
         }
       });
       
+      // Always ensure posts are sorted by date
       const sortedPosts = sortByDate(mappedPosts);
       setAllPosts(sortedPosts);
       
@@ -106,10 +112,6 @@ const BlogPosts = (props: any) => {
       setLoading(false);
     }
   };
-
-  const sortByDate = (array: any[]) => {  
-    return array.sort((a, b) => new Date(b?.PublishedDate).getTime() - new Date(a?.PublishedDate).getTime());
-  }
 
   // Fetch categories from SharePoint
   const fetchCategories = async (sp: any) => {
@@ -148,7 +150,11 @@ const BlogPosts = (props: any) => {
       }
     });
     
-    setPage(1); // Reset to first page
+    // Reset search and pagination when category changes
+    setSearchQuery("");
+    setSearchResults([]);
+    setCurrentResultIndex(0);
+    setPage(1);
   };
 
   // Remove a specific category from selection
@@ -165,23 +171,26 @@ const BlogPosts = (props: any) => {
     setPage(1);
   };
 
-  // Apply filtering based on selected categories and search
-  useEffect(() => {
-    // Recalculate filtered posts when category selection or search changes
-    applyFiltersAndUpdatePosts();
-  }, [selectedCategories, searchQuery, allPosts]);
-
-  // Get filtered posts based on current search and category filters
-  const getFilteredPosts = useCallback(() => {
+  // Get filtered posts based on current category filters
+  const getFilteredPostsByCategories = useCallback(() => {
     let filteredPosts = [...allPosts];
     
-    // First filter by categories if any are selected (OR logic)
+    // Filter by categories if any are selected (OR logic)
     if (selectedCategories.length > 0) {
       const selectedCategoryIds = selectedCategories.map(cat => cat.Id);
       filteredPosts = filteredPosts.filter(post => 
         post.Categories.some(cat => selectedCategoryIds.includes(cat.Id))
       );
     }
+    
+    // Always ensure posts are sorted by date
+    return sortByDate(filteredPosts);
+  }, [allPosts, selectedCategories]);
+
+  // Further filter the category-filtered posts by search query
+  const getFilteredPosts = useCallback(() => {
+    // First filter by categories
+    let filteredPosts = getFilteredPostsByCategories();
     
     // Then apply search filter if there's a search query
     if (searchQuery.trim()) {
@@ -201,8 +210,9 @@ const BlogPosts = (props: any) => {
       });
     }
     
-    return filteredPosts;
-  }, [allPosts, selectedCategories, searchQuery]);
+    // Always ensure posts are sorted by date
+    return sortByDate(filteredPosts);
+  }, [getFilteredPostsByCategories, searchQuery]);
 
   // Recalculate search results indices when search query changes
   const updateSearchResultIndices = useCallback(() => {
@@ -212,8 +222,13 @@ const BlogPosts = (props: any) => {
       return;
     }
 
-    // Find indices of all posts that match the search query
-    const matches = allPosts.reduce<number[]>((acc, post, idx) => {
+    // Get the category-filtered posts first
+    const categoryFilteredPosts = getFilteredPostsByCategories();
+    
+    // Find indices of all posts that match the search query within category-filtered posts
+    const matches: number[] = [];
+    
+    categoryFilteredPosts.forEach((post, index) => {
       // Create a temporary div to parse HTML content
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = DOMPurify.sanitize(post.Body);
@@ -226,14 +241,13 @@ const BlogPosts = (props: any) => {
       const contentToSearch = `${post.Title} ${post.Author} ${post.PublishedDate} ${post.PublishedYear} ${post.PublishedDateAndMonth} ${post.PublishedTime} ${categoryTitles} ${textContent}`.toLowerCase();
 
       if (contentToSearch.includes(searchQuery.toLowerCase())) {
-        acc.push(idx);
+        matches.push(index);
       }
-      return acc;
-    }, []);
+    });
 
     setSearchResults(matches);
     setCurrentResultIndex(matches.length > 0 ? 0 : -1);
-  }, [searchQuery, allPosts]);
+  }, [searchQuery, getFilteredPostsByCategories]);
 
   // Apply all filters and update visible posts
   const applyFiltersAndUpdatePosts = useCallback(() => {
@@ -255,19 +269,10 @@ const BlogPosts = (props: any) => {
     }
   }, [getFilteredPosts, updateSearchResultIndices, page, postsPerPage, searchQuery]);
 
-  // Load more posts when page changes
+  // Effect for updating filtered posts when categories or search changes
   useEffect(() => {
-    const filteredPosts = getFilteredPosts();
-    const endIndex = page * postsPerPage;
-    
-    if (endIndex <= filteredPosts.length) {
-      setVisiblePosts(filteredPosts.slice(0, endIndex));
-    } else if (filteredPosts.length > 0) {
-      setVisiblePosts(filteredPosts);
-    } else {
-      setVisiblePosts([]);
-    }
-  }, [page, getFilteredPosts]);
+    applyFiltersAndUpdatePosts();
+  }, [selectedCategories, searchQuery, allPosts, page, applyFiltersAndUpdatePosts]);
 
   // Setup intersection observer for infinite scrolling
   useEffect(() => {
@@ -310,7 +315,7 @@ const BlogPosts = (props: any) => {
     };
   }, [loading, visiblePosts.length, getFilteredPosts, loaderRef.current]);
 
-  // Search functionality - enhanced to work with category filters
+  // Search functionality - now works with category filters
   const handleSearch = (text: string) => {
     setSearchQuery(text);
     setPage(1); // Reset to first page when search changes
@@ -318,10 +323,7 @@ const BlogPosts = (props: any) => {
     if (!text.trim()) {
       setSearchResults([]);
       setCurrentResultIndex(0);
-      return;
     }
-    
-    // Rest of the search logic is handled in updateSearchResultIndices and applyFiltersAndUpdatePosts
   };
 
   // Highlight text safely (non-HTML content)
@@ -393,15 +395,28 @@ const BlogPosts = (props: any) => {
     if (searchResults.length === 0 || currentResultIndex === searchResults.length - 1) return;
     const nextIndex = currentResultIndex + 1;
     setCurrentResultIndex(nextIndex);
+    
+    // Get the category-filtered posts
+    const categoryFilteredPosts = getFilteredPostsByCategories();
     const postIndex = searchResults[nextIndex];
+    const postId = categoryFilteredPosts[postIndex]?.Id;
 
-    // Make sure the post is visible by loading the appropriate page
-    const pageForNextResult = Math.ceil((postIndex + 1) / postsPerPage);
-    setPage(Math.max(pageForNextResult, page)); // Don't go back, only forward
+    // Find the post in visiblePosts
+    const visiblePostIndex = visiblePosts.findIndex(p => p.Id === postId);
+    
+    // If post is not visible, load the appropriate page
+    if (visiblePostIndex === -1) {
+      const pageForNextResult = Math.ceil((postIndex + 1) / postsPerPage);
+      setPage(Math.max(pageForNextResult, page)); // Don't go back, only forward
+    }
 
-    // Wait for rendering then scroll
+    // Wait for rendering then scroll to the post
     setTimeout(() => {
-      resultsRefs.current[postIndex]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Find the post's DOM reference by its ID
+      const postElement = document.querySelector(`[data-post-id="${postId}"]`) as HTMLDivElement;
+      if (postElement) {
+        postElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
     }, 100);
   };
 
@@ -409,10 +424,14 @@ const BlogPosts = (props: any) => {
     if (searchResults.length === 0 || currentResultIndex === 0) return;
     const prevIndex = currentResultIndex - 1;
     setCurrentResultIndex(prevIndex);
+    
+    // Get the category-filtered posts
+    const categoryFilteredPosts = getFilteredPostsByCategories();
     const postIndex = searchResults[prevIndex];
+    const postId = categoryFilteredPosts[postIndex]?.Id;
 
     // Find the post in visiblePosts
-    const visiblePostIndex = visiblePosts.findIndex(p => p.Id === allPosts[postIndex].Id);
+    const visiblePostIndex = visiblePosts.findIndex(p => p.Id === postId);
     
     // If post is not visible, load the appropriate page
     if (visiblePostIndex === -1) {
@@ -420,9 +439,13 @@ const BlogPosts = (props: any) => {
       setPage(pageForPrevResult);
     }
 
-    // Wait for rendering then scroll
+    // Wait for rendering then scroll to the post
     setTimeout(() => {
-      resultsRefs.current[postIndex]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Find the post's DOM reference by its ID
+      const postElement = document.querySelector(`[data-post-id="${postId}"]`) as HTMLDivElement;
+      if (postElement) {
+        postElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
     }, 100);
   };
 
@@ -453,6 +476,24 @@ const BlogPosts = (props: any) => {
   // Check if a category is selected
   const isCategorySelected = (categoryId: number) => {
     return selectedCategories.some(cat => cat.Id === categoryId);
+  };
+
+  // Check if a post is currently highlighted in search results
+  const isHighlightedPost = (post: IBlogPost) => {
+    if (!searchQuery.trim() || searchResults.length === 0) return false;
+    
+    const categoryFilteredPosts = getFilteredPostsByCategories();
+    const postIndex = categoryFilteredPosts.findIndex(p => p.Id === post.Id);
+    return searchResults.includes(postIndex);
+  };
+
+  // Check if a post is the current search result
+  const isCurrentResultPost = (post: IBlogPost) => {
+    if (!searchQuery.trim() || searchResults.length === 0 || currentResultIndex < 0) return false;
+    
+    const categoryFilteredPosts = getFilteredPostsByCategories();
+    const postIndex = categoryFilteredPosts.findIndex(p => p.Id === post.Id);
+    return searchResults[currentResultIndex] === postIndex;
   };
 
   return (
@@ -583,16 +624,15 @@ const BlogPosts = (props: any) => {
             </div>
           ) : (
             <>
-              {visiblePosts.map((post: any, visibleIndex) => {
-                const actualIndex = allPosts.findIndex(p => p.Id === post.Id);
-                const isHighlighted = searchResults.includes(actualIndex);
-                const isCurrentResult = searchResults[currentResultIndex] === actualIndex;
+              {visiblePosts.map((post: IBlogPost) => {
+                const isHighlighted = isHighlightedPost(post);
+                const isCurrentResult = isCurrentResultPost(post);
 
                 return (
                   <div
                     className={`blog-post ms-blog-postBox ms-shadow ${isCurrentResult ? "current" : isHighlighted ? "highlighted" : ""}`}
                     key={post.Id}
-                    ref={el => resultsRefs.current[actualIndex] = el}
+                    data-post-id={post.Id}
                   >
                     <div className="ms-blog-postBoxDate">
                       <div className="ms-textSmall">{highlightText(post?.PublishedYear?.toString())}</div>
