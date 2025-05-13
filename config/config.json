@@ -17,12 +17,21 @@
           "manifest": "./src/webparts/learnerBlogPost/LearnerBlogPostWebPart.manifest.json"
         }
       ]
+    },
+    "marketing-calendar-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/marketingCalendar/MarketingCalendarWebPart.js",
+          "manifest": "./src/webparts/marketingCalendar/MarketingCalendarWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},
   "localizedResources": {
     "DemowebWebPartStrings": "lib/webparts/demoweb/loc/{locale}.js",
     "ControlStrings": "node_modules/@pnp/spfx-controls-react/lib/loc/{locale}.js",
-    "LearnerBlogPostWebPartStrings": "lib/webparts/learnerBlogPost/loc/{locale}.js"
+    "LearnerBlogPostWebPartStrings": "lib/webparts/learnerBlogPost/loc/{locale}.js",
+    "MarketingCalendarWebPartStrings": "lib/webparts/marketingCalendar/loc/{locale}.js"
   }
 }
