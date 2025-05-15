@@ -18,6 +18,7 @@ import {
   IIconProps
 } from '@fluentui/react';
 import { useEffect, useState } from 'react';
+import { AIEnabledInputField } from './AIEnabledInputField';
 
 // Custom Comment Card component to replace the PnP one
 interface ICustomCommentCardProps {
@@ -249,14 +250,23 @@ export default function ListItemComments(props: IListItemCommentsProps): React.R
         
         {/* Add Comment Section */}
         <div className={styles.addCommentSection}>
-          <TextField
+        <AIEnabledInputField
+        label="Content"
+        value={newCommentText}
+        onChange={(_, newValue) => setNewCommentText(newValue || '')}
+        multiline
+        rows={8}
+        perplexityApiKey={''}
+        required
+      />
+          {/* <TextField
             multiline
             rows={3}
             placeholder="Add a comment..."
             value={newCommentText}
             onChange={(_, newValue) => setNewCommentText(newValue || '')}
             disabled={addingComment}
-          />
+          /> */}
           <Stack horizontal horizontalAlign="end" className={styles.addCommentButtonContainer}>
             <PrimaryButton 
               text="Add Comment" 
