@@ -86,7 +86,9 @@ export default function ModernCalendar(props: any) {
           createdBy: item.Author ? item.Author.Title : '',
           modifiedBy: item.Editor ? item.Editor.Title : '',
           RecurrenceData: item.RecurrenceData || null,
-          fAllDayEvent: item.fAllDayEvent || false
+          fAllDayEvent: item.fAllDayEvent || false,
+          Color: categoryOptionsColor[item?.Category] ? categoryOptionsColor[item?.Category] : '#3174ad',
+          FontColor: categoryOptionsFontColor[item?.Category] ? categoryOptionsFontColor[item?.Category] : '#fff',
         };
       });
       AllGeneratedevents = [];
@@ -138,7 +140,22 @@ export default function ModernCalendar(props: any) {
  * @param recurrenceData Event recurrence data from SharePoint
  * @returns Array of recurring event instances
  */
-
+  const categoryOptionsColor: any = {
+    'Meeting': '#3174ad',
+    'RFQ': ' #ffff00',
+    'RFP': '#107c10',
+    'CSP/Traditional': '#da3b01',
+    'DB': ' #c239b3',
+    'Interview': '#adadad'
+  }
+  const categoryOptionsFontColor: any = {
+    'Meeting': '#fff',
+    'RFQ': ' #000000',
+    'RFP': '#fff',
+    'CSP/Traditional': '#fff',
+    'DB': ' #fff',
+    'Interview': '#000000'
+  }
   function eventDataForBinding(eventDetails: any, currentDate: Date) {
     return {
       ...eventDetails,
@@ -150,7 +167,9 @@ export default function ModernCalendar(props: any) {
       end: new Date(currentDate),
       startTime: new Date(currentDate),
       endTime: new Date(currentDate),
-      RecurrenceData: eventDetails.RecurrenceData
+      RecurrenceData: eventDetails.RecurrenceData,
+      Color: categoryOptionsColor[eventDetails?.Category] ? categoryOptionsColor[eventDetails?.Category] : '#3174ad',
+      FontColor: categoryOptionsFontColor[eventDetails?.Category] ? categoryOptionsFontColor[eventDetails?.Category] : '#fff',
     };
   }
 
@@ -1072,19 +1091,19 @@ export default function ModernCalendar(props: any) {
   const handleNavigate = (newDate: any, newView: any) => {
     setCurrentCalendarDate(newDate);
     setCurrentCalendarView(newView);
-    
+
     // For month view, we want to show events from the current month and adjacent months
     // that might appear on the calendar
     if (newView === 'month') {
       // Start of the displayed calendar period (might include days from previous month)
       const start = new Date(newDate.getFullYear(), newDate.getMonth(), 1);
       start.setDate(1 - (start.getDay() === 0 ? 7 : start.getDay())); // Go back to the first day shown on calendar
-      
+
       // End of the displayed calendar period (might include days from next month)
       const end = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 0);
       const daysToAdd = 7 - end.getDay();
       end.setDate(end.getDate() + (daysToAdd === 7 ? 0 : daysToAdd)); // Go forward to the last day shown on calendar
-      
+
       // Filter events that fall within the displayed period
       const filteredEvents = AllGeneratedevents.filter((event: ICalendarEvent) => {
         // An event is visible if:
@@ -1092,7 +1111,7 @@ export default function ModernCalendar(props: any) {
         // 2. It ends after the start of the displayed period
         return event.startTime <= end && event.endTime >= start;
       });
-      
+
       setEvents(filteredEvents);
     } else {
       // For other views (week, day, agenda), filter based on the active period
@@ -1121,11 +1140,11 @@ export default function ModernCalendar(props: any) {
     const hasMoreEvents = events.length > 3;
     const displayEvents = hasMoreEvents ? events.slice(0, 2) : events;
     const moreEventsCount = hasMoreEvents ? events.length - 2 : 0;
-    
+
     return (
       <div className="rbc-day-events-container">
         {displayEvents.map((event, index) => (
-          <div 
+          <div
             key={`${event.id}-${index}`}
             className="rbc-event-preview"
             onClick={(e) => {
@@ -1147,9 +1166,9 @@ export default function ModernCalendar(props: any) {
             </div>
           </div>
         ))}
-        
+
         {hasMoreEvents && (
-          <div 
+          <div
             className="rbc-show-more"
             onClick={(e) => {
               e.stopPropagation();
@@ -1166,7 +1185,7 @@ export default function ModernCalendar(props: any) {
   // Render the events in the panel
   const renderPanelEvent = (item: ICalendarEvent) => {
     return (
-      <div 
+      <div
         className="panel-event"
         onClick={() => {
           setShowDatePanel(false);
@@ -1193,11 +1212,11 @@ export default function ModernCalendar(props: any) {
     const day = date?.getDate();
     const month = date?.getMonth();
     const year = date?.getFullYear();
-    
+
     return events?.filter(event => {
       const eventStart = new Date(event?.startTime);
       const eventEnd = new Date(event?.endTime);
-      
+
       // Check if the event occurs on this date
       const eventDate = new Date(year, month, day);
       return eventStart <= eventDate && eventEnd >= eventDate;
@@ -1210,7 +1229,7 @@ export default function ModernCalendar(props: any) {
       event: (eventProps: any) => {
         const { event } = eventProps;
         return (
-          <div 
+          <div
             className="rbc-event-preview"
             onClick={(e) => {
               e.stopPropagation();
@@ -1218,13 +1237,13 @@ export default function ModernCalendar(props: any) {
             }}
           >
             <div className="event-title">
-            <span>{event.title}</span>
+              <span>{event.title}</span>
             </div>
           </div>
         );
       },
     },
-    eventWrapper: ({ children }:any) => <>{children}</>,
+    eventWrapper: ({ children }: any) => <>{children}</>,
   };
   const eventStyleGetter = (event: any, start: any, end: any, isSelecte: any) => {
     const style = {
@@ -1247,7 +1266,7 @@ export default function ModernCalendar(props: any) {
           <div className={'column'}>
             <h2>Marketing Calendar</h2>
             <div className={'calendarContainer'}>
-            <Calendar
+              <Calendar
                 localizer={localizer}
                 events={events.map(event => ({
                   ...event,
@@ -1281,7 +1300,7 @@ export default function ModernCalendar(props: any) {
           onCancel={() => setShowModal(false)}
         />
       )}
-       <Panel
+      <Panel
         isOpen={showDatePanel}
         onDismiss={() => setShowDatePanel(false)}
         headerText={selectedDate ? `Events for ${format(selectedDate, 'MMMM d, yyyy')}` : 'Events'}
