@@ -18,6 +18,8 @@ import { Toggle } from '@fluentui/react/lib/Toggle';
 import { ICalendarEvent } from './CalendarEvent';
 import { EventRecurrenceInfo } from '../../../globalCommon/EventRecurrenceControls/EventRecurrenceInfo/EventRecurrenceInfo';
 import { spfi, SPFx } from '@pnp/sp';
+import { parseRecurrenceToString } from './reccurenceStringToText';
+import moment from 'moment';
 const stackTokens: IStackTokens = { childrenGap: 12 };
 const stackStyles: IStackStyles = {
   root: {
@@ -46,6 +48,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
     description: '',
     attendees: [],
     category: '',
+    fAllDayEvent: false,
     resources: '',
     freeBusy: 'Busy',
     checkDoubleBooking: false,
@@ -68,6 +71,9 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
   useEffect(() => {
     if (props.event) {
       setFormData({ ...props.event });
+      if(props.event.fAllDayEvent==true){
+        setIsAllDay(true);
+      }
       // Check if this is a recurring event by looking for RecurrenceData
       if (props.event.RecurrenceData) {
         setShowRecurrenceSeriesInfo(true);
@@ -84,7 +90,23 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       [field]: value
     }));
   };
+  const getUtcTime=async (date: string | Date): Promise<string>=> {
+    try {
+      // Initialize PnPjs SPFI with your site URL and properly set up the observer
 
+      // Ensure date is a Date object
+      const dateObj = typeof date === "string" ? new Date(date) : date;
+
+      // Convert local time to UTC using the web's regional settings
+      const utcTime = await sp.web.regionalSettings.timeZone.localTimeToUTC(dateObj);
+
+      // Return as ISO string, or format as needed
+      return new Date(utcTime).toISOString();
+    } catch (error) {
+      console.error("Error converting time to UTC:", error);
+      return Promise.reject(error);
+    }
+  }
   const handleSave = async () => {
     const eventToSave = { ...formData };
 
@@ -95,19 +117,37 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       eventToSave.RecurrenceData = recurrenceData;
     }
     try {
-      let Item: any = {
-        Title: eventToSave.title,
-        Location: eventToSave.locations,
-        EventDate: eventToSave.startTime.toISOString(),
-        EndDate: eventToSave.endTime.toISOString(),
-        Description: eventToSave.description,
-        Category: eventToSave.category,
-        fAllDayEvent: isAllDay,
-      };
-      // Include recurrence data if it exists
-      if (eventToSave.RecurrenceData) {
-        Item.RecurrenceData = eventToSave.RecurrenceData;
-      }
+       let Item: any = {
+      Title: eventToSave.title,
+      Location: eventToSave.locations,
+      Description: eventToSave.description,
+      Category: eventToSave.category,
+      fAllDayEvent: isAllDay,
+    };
+
+    // Format dates properly based on whether it's an all-day event or not
+    if (isAllDay) {
+      // For SharePoint all-day events, both start and end dates should be the same day
+      // Extract just the date portion without any timezone conversion
+      const dateOnly = moment(eventToSave.startTime).format('YYYY-MM-DD');
+      
+      // Set both start and end time to the same date at 00:00:00 and WITHOUT 'Z' suffix
+      Item.EventDate = `${dateOnly}T00:00:00`;
+      Item.EndDate = `${dateOnly}T23:59:59`;  // End of the same day
+      
+      // Make sure the all-day flag is set
+      Item.fAllDayEvent = true;
+    } else {
+      // For regular events with specific times
+      Item.EventDate = moment(eventToSave.startTime, 'YYYY-MM-DD HH:mm:ss').format('YYYY-MM-DDTHH:mm:ss') + 'Z';
+      Item.EndDate = moment(eventToSave.endTime, 'YYYY-MM-DD HH:mm:ss').format('YYYY-MM-DDTHH:mm:ss') + 'Z';
+    }
+
+    // Include recurrence data if it exists
+    if (eventToSave.RecurrenceData) {
+      Item.RecurrenceData = eventToSave.RecurrenceData;
+    }
+    
       if (props.isNew) {
         await sp.web.lists.getById(props.MarketingCalendarId).items.add(Item).then((response: any) => {
           console.log('Item Added successfully:', response);
@@ -159,7 +199,11 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       eventDate: startDate,
       endDate: endDate,
     };
-    if (props.isNew) {
+    if (props.isNew || props.event?.RecurrenceData==null) {
+      setFormData((prevData) => ({
+        ...prevData,
+        RecurrenceData: returnedRecurrenceInfo?.recurrenceData,
+      }));
       setReturnedRecurrenceInfo(returnedRecurrenceInfo);
     } else {
       setTempRecurrenceData(returnedRecurrenceInfo);
@@ -184,7 +228,12 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
     return '';
   };
   const saveRecurrenceChanges = () => {
-    setRecurrenceData(tempRecurrenceData);
+    setRecurrenceData(tempRecurrenceData?.recurrenceData);
+    setReturnedRecurrenceInfo(tempRecurrenceData);
+    setFormData((prevData) => ({
+      ...prevData,
+      RecurrenceData: tempRecurrenceData?.recurrenceData,
+    }));
     setIsEditingRecurrence(false);
   };
 
@@ -200,29 +249,21 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
   const getRecurrenceRule = (recurrenceData: any) => {
     return getRecurrenceType(recurrenceData); // Same as type for this use case
   };
-  const parseRecurrenceToString = (recurrenceData?: string): string => {
-    if (!recurrenceData) return 'No recurrence';
-
-    // This is a placeholder - you'll need to implement actual parsing based on your recurrence format
-    // Example implementation (modify according to your recurrence data format):
-    if (recurrenceData.includes('DAILY')) {
-      return 'Occurs every day';
-    } else if (recurrenceData.includes('WEEKLY')) {
-      return 'Occurs weekly';
-    } else if (recurrenceData.includes('MONTHLY')) {
-      return 'Occurs monthly';
-    } else if (recurrenceData.includes('YEARLY')) {
-      return 'Occurs yearly';
-    }
-
-    return 'Custom recurrence pattern';
-  };
+  const renderFooterContent = () => (
+    <Stack horizontal tokens={{ childrenGap: 8 }} horizontalAlign="end">
+      <PrimaryButton onClick={handleSave} text="Save" />
+      {!props.isNew && <DefaultButton onClick={handleDelete} text="Delete" />}
+      <DefaultButton onClick={props.onCancel} text="Cancel" />
+    </Stack>
+  );
   return (
     <Panel
       isOpen={true}
       onDismiss={props.onCancel}
       headerText={props.isNew ? "Add Event" : "Edit Event"}
       type={PanelType.medium}
+      onRenderFooterContent={renderFooterContent}
+  isFooterAtBottom={true} 
     >
       <Stack tokens={stackTokens} styles={stackStyles}>
         <TextField
@@ -360,10 +401,10 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
               endDate={formData.endTime}
               returnRecurrenceInfo={returnRecurrenceInfo}
               siteUrl={props.Context.pageContext.web.absoluteUrl}
-              recurrenceData={isEditingRecurrence ? tempRecurrenceData : recurrenceData}
+              recurrenceData={!isEditingRecurrence ? recurrenceData:''}
               removeRecurrence={true}  // Enable editing of recurrence
-              selectedRecurrenceRule={getRecurrenceRule(isEditingRecurrence ? tempRecurrenceData : recurrenceData)}
-              selectedKey={getRecurrenceType(isEditingRecurrence ? tempRecurrenceData : recurrenceData)}
+              selectedRecurrenceRule={!isEditingRecurrence? getRecurrenceRule(returnedRecurrenceInfo?.recurrenceData):''}
+              selectedKey={!isEditingRecurrence? getRecurrenceType(returnedRecurrenceInfo?.recurrenceData):''}
               display={true}  // Provide a valid value for 'display'
               DueDate={formData.endTime}  // Provide a valid value for 'DueDate'
             />
@@ -378,13 +419,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
         )}
 
 
-        <Stack horizontal tokens={{ childrenGap: 8 }} horizontalAlign="end">
-          <PrimaryButton onClick={handleSave} text="Save" />
-          {!props.isNew && (
-            <DefaultButton onClick={handleDelete} text="Delete" />
-          )}
-          <DefaultButton onClick={props.onCancel} text="Cancel" />
-        </Stack>
+
       </Stack>
     </Panel>
   );

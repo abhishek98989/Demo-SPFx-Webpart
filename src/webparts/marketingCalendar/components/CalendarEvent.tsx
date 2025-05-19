@@ -6,9 +6,13 @@ import "@pnp/sp/lists";
 import { parseString } from 'xml2js';
 import "@pnp/sp/items";
 import { Calendar, momentLocalizer } from 'react-big-calendar';
-import moment from 'moment';
+import { Panel, PanelType } from '@fluentui/react/lib/Panel';
+import { List } from '@fluentui/react/lib/List';
+import { Text } from '@fluentui/react/lib/Text';
+import { format } from 'date-fns';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import EventForm from './EventForm';
+import moment from 'moment';
 export interface ICalendarEvent {
   id: string;
   title: string;
@@ -25,6 +29,7 @@ export interface ICalendarEvent {
   created: Date;
   createdBy: any;
   RecurrenceData: any;
+  fAllDayEvent?: boolean;
   modifiedBy: any;
 }
 
@@ -39,6 +44,9 @@ export default function ModernCalendar(props: any) {
   const [currentCalendarDate, setCurrentCalendarDate] = useState<Date>(new Date());
   const [currentCalendarView, setCurrentCalendarView] = useState<String>('month');
   const sp = spfi().using(SPFx(props?.Context));
+  const [showDatePanel, setShowDatePanel] = useState(false);
+  const [selectedDateEvents, setSelectedDateEvents] = useState<ICalendarEvent[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   useEffect(() => {
     if (props.MarketingCalendarId) {
       loadEvents();
@@ -65,8 +73,8 @@ export default function ModernCalendar(props: any) {
           id: item.Id.toString(),
           title: item.Title || '',
           locations: item.Location || '',
-          startTime: new Date(item.EventDate),
-          endTime: new Date(item.EndDate),
+          startTime: new Date(item.EventDate?.replace('Z', '')),
+          endTime: new Date(item.EndDate?.replace('Z', '')),
           description: item.Description || '',
           attendees: item.ParticipantsPicker || [],
           category: item.Category || '',
@@ -78,6 +86,7 @@ export default function ModernCalendar(props: any) {
           createdBy: item.Author ? item.Author.Title : '',
           modifiedBy: item.Editor ? item.Editor.Title : '',
           RecurrenceData: item.RecurrenceData || null,
+          fAllDayEvent: item.fAllDayEvent || false
         };
       });
       AllGeneratedevents = [];
@@ -1060,21 +1069,163 @@ export default function ModernCalendar(props: any) {
     const eventYear = eventDate.getFullYear(); // Get year of the event
     return { year: eventYear, month: eventMonth };
   }
-  const handleNavigate = (newDate: any, newiew: any) => {
+  const handleNavigate = (newDate: any, newView: any) => {
     setCurrentCalendarDate(newDate);
-    setCurrentCalendarView(newiew);
-    const { year: currentYear, month: currentMonth } = getYearMonthFromDate(newDate);
-    const filteredData = AllGeneratedevents.filter((event: any) => {
-      const startDate = getYearMonthFromDate(event.startTime);
-      const endDate = getYearMonthFromDate(event.endTime);
-      return (
-        (startDate.year < currentYear || (startDate.year === currentYear && startDate.month <=  (currentMonth == 1 ? 12 : currentMonth - 1))) &&
-        (endDate.year > currentYear || (endDate.year === currentYear && endDate.month >= (currentMonth == 12 ? 1 : currentMonth + 1)))
-      );
-    });
-    setEvents(filteredData);
+    setCurrentCalendarView(newView);
+    
+    // For month view, we want to show events from the current month and adjacent months
+    // that might appear on the calendar
+    if (newView === 'month') {
+      // Start of the displayed calendar period (might include days from previous month)
+      const start = new Date(newDate.getFullYear(), newDate.getMonth(), 1);
+      start.setDate(1 - (start.getDay() === 0 ? 7 : start.getDay())); // Go back to the first day shown on calendar
+      
+      // End of the displayed calendar period (might include days from next month)
+      const end = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 0);
+      const daysToAdd = 7 - end.getDay();
+      end.setDate(end.getDate() + (daysToAdd === 7 ? 0 : daysToAdd)); // Go forward to the last day shown on calendar
+      
+      // Filter events that fall within the displayed period
+      const filteredEvents = AllGeneratedevents.filter((event: ICalendarEvent) => {
+        // An event is visible if:
+        // 1. It starts before the end of the displayed period AND
+        // 2. It ends after the start of the displayed period
+        return event.startTime <= end && event.endTime >= start;
+      });
+      
+      setEvents(filteredEvents);
+    } else {
+      // For other views (week, day, agenda), filter based on the active period
+      setEvents(AllGeneratedevents);
+    }
   };
 
+
+  // Custom event component renderer
+  const customEventPropGetter = (event: ICalendarEvent) => {
+    return {
+      className: event.category ? `event-${event.category.toLowerCase()}` : '',
+    };
+  };
+
+  // Handle showing the panel with all events for a date
+  const handleShowMoreEvents = (events: ICalendarEvent[], date: Date) => {
+    setSelectedDateEvents(events);
+    setSelectedDate(date);
+    setShowDatePanel(true);
+  };
+
+  // Custom date cell component for month view
+  const CustomDateCell = ({ date, events }: { date: Date, events: ICalendarEvent[] }) => {
+    // Check if there are more than 3 events for this date
+    const hasMoreEvents = events.length > 3;
+    const displayEvents = hasMoreEvents ? events.slice(0, 2) : events;
+    const moreEventsCount = hasMoreEvents ? events.length - 2 : 0;
+    
+    return (
+      <div className="rbc-day-events-container">
+        {displayEvents.map((event, index) => (
+          <div 
+            key={`${event.id}-${index}`}
+            className="rbc-event-preview"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSelectEvent(event);
+            }}
+          >
+            <div className="event-title">
+              {event.fAllDayEvent ? (
+                <span>{event.title}</span>
+              ) : (
+                <>
+                  <span className="event-time">
+                    {format(event.startTime, 'h:mm a')} - {format(event.endTime, 'h:mm a')}
+                  </span>
+                  <span className="event-title-text">{event.title}</span>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+        
+        {hasMoreEvents && (
+          <div 
+            className="rbc-show-more"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleShowMoreEvents(events, date);
+            }}
+          >
+            +{moreEventsCount} more
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render the events in the panel
+  const renderPanelEvent = (item: ICalendarEvent) => {
+    return (
+      <div 
+        className="panel-event"
+        onClick={() => {
+          setShowDatePanel(false);
+          handleSelectEvent(item);
+        }}
+      >
+        {item.fAllDayEvent ? (
+          <span className="event-title">{item.title} (All day)</span>
+        ) : (
+          <div>
+            <span style={{ fontSize: 'small', display: 'block' }}>
+              {format(item.startTime, 'h:mm a')} - {format(item.endTime, 'h:mm a')}
+            </span>
+            <span style={{ fontSize: 'medium' }}>{item.title}</span>
+            {item.locations && <span style={{ fontSize: 'small', display: 'block' }}>Location: {item.locations}</span>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Get all events for a specific day in month view
+  const getEventsForDate = (date: Date) => {
+    const day = date?.getDate();
+    const month = date?.getMonth();
+    const year = date?.getFullYear();
+    
+    return events?.filter(event => {
+      const eventStart = new Date(event?.startTime);
+      const eventEnd = new Date(event?.endTime);
+      
+      // Check if the event occurs on this date
+      const eventDate = new Date(year, month, day);
+      return eventStart <= eventDate && eventEnd >= eventDate;
+    });
+  };
+
+  // Custom components for the Calendar
+  const components = {
+    month: {
+      event: (eventProps: any) => {
+        const { event } = eventProps;
+        return (
+          <div 
+            className="rbc-event-preview"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSelectEvent(event);
+            }}
+          >
+            <div className="event-title">
+            <span>{event.title}</span>
+            </div>
+          </div>
+        );
+      },
+    },
+    eventWrapper: ({ children }:any) => <>{children}</>,
+  };
   return (
     <div className={'modernCalendar'}>
       <div className={'container'}>
@@ -1082,7 +1233,7 @@ export default function ModernCalendar(props: any) {
           <div className={'column'}>
             <h2>Calendar for {'listName'}</h2>
             <div className={'calendarContainer'}>
-              <Calendar
+            <Calendar
                 localizer={localizer}
                 events={events.map(event => ({
                   ...event,
@@ -1098,6 +1249,8 @@ export default function ModernCalendar(props: any) {
                 onSelectSlot={handleSelectSlot}
                 onNavigate={handleNavigate}
                 views={['month', 'week', 'day', 'agenda']}
+                eventPropGetter={customEventPropGetter}
+                components={components}
               />
             </div>
           </div>
@@ -1114,6 +1267,17 @@ export default function ModernCalendar(props: any) {
           onCancel={() => setShowModal(false)}
         />
       )}
+       <Panel
+        isOpen={showDatePanel}
+        onDismiss={() => setShowDatePanel(false)}
+        headerText={selectedDate ? `Events for ${format(selectedDate, 'MMMM d, yyyy')}` : 'Events'}
+        type={PanelType.medium}
+      >
+        <List
+          items={selectedDateEvents}
+          onRenderCell={renderPanelEvent}
+        />
+      </Panel>
     </div>
   );
 }
