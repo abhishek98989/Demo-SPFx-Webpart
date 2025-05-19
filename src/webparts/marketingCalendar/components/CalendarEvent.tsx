@@ -24,7 +24,7 @@ export interface ICalendarEvent {
   modified: Date;
   created: Date;
   createdBy: any;
-  RecurrenceData:any;
+  RecurrenceData: any;
   modifiedBy: any;
 }
 
@@ -36,6 +36,8 @@ export default function ModernCalendar(props: any) {
   const [showModal, setShowModal] = useState<boolean>(false);
   const [selectedEvent, setSelectedEvent] = useState<ICalendarEvent | null>(null);
   const [isNewEvent, setIsNewEvent] = useState<boolean>(true);
+  const [currentCalendarDate, setCurrentCalendarDate] = useState<Date>(new Date());
+  const [currentCalendarView, setCurrentCalendarView] = useState<String>('month');
   const sp = spfi().using(SPFx(props?.Context));
   useEffect(() => {
     if (props.MarketingCalendarId) {
@@ -53,7 +55,7 @@ export default function ModernCalendar(props: any) {
       // Using PnP JS to get list items with the correct column names
       const items = await sp.web.lists.getById(props?.MarketingCalendarId)
         .items
-        .select('Id,Title,Location,EventDate,RecurrenceData,EndDate,Description,ParticipantsPicker/Id,Category,FreeBusy,Overbook,Modified,Created,Author/Title,Editor/Title')
+        .select('Id,Title,Location,EventDate,RecurrenceData,fRecurrence,fAllDayEvent,EndDate,Description,ParticipantsPicker/Id,Category,FreeBusy,Overbook,Modified,Created,Author/Title,Editor/Title')
         .expand('Author,Editor,ParticipantsPicker').top(5000)()
       const NonRecurrenceData = items.filter((item) => item?.RecurrenceData == null);
       const Recurrencedatas = items.filter((item) => item?.RecurrenceData != null && item?.RecurrenceData != 'Every 1 day(s)');
@@ -86,7 +88,7 @@ export default function ModernCalendar(props: any) {
           AllGeneratedevents = AllGeneratedevents.concat(allDates)
         }
       }
-      handleNavigate(new Date(), 'month')
+      handleNavigate(currentCalendarDate, currentCalendarView)
       // setEvents(AllGeneratedevents);
     } catch (error) {
       console.error('Error loading events:', error);
@@ -139,7 +141,7 @@ export default function ModernCalendar(props: any) {
       end: new Date(currentDate),
       startTime: new Date(currentDate),
       endTime: new Date(currentDate),
-      RecurrenceData: eventDetails.RecurrenceData 
+      RecurrenceData: eventDetails.RecurrenceData
     };
   }
 
@@ -1022,7 +1024,7 @@ export default function ModernCalendar(props: any) {
     /**
      * Handle yearly by day recurrence pattern
      */
-    
+
   }
 
   const saveEvent = (event: ICalendarEvent) => {
@@ -1035,50 +1037,13 @@ export default function ModernCalendar(props: any) {
   };
 
   const createEvent = async (event: ICalendarEvent) => {
-    try {
-      const addItem = {
-        Title: event.title,
-        Location: event.locations,
-        EventDate: event.startTime.toISOString(),
-        EndDate: event.endTime.toISOString(),
-        // Description: event.description,
-        // Category: event.category,
-        // FreeBusy: event.freeBusy,
-        // Overbook: event.checkDoubleBooking
-      };
-
-      await sp.web.lists.getById(props.MarketingCalendarId).items.add(addItem);
-      loadEvents();
-    } catch (error) {
-      console.error('Error creating event:', error);
-    }
+    loadEvents();
   };
 
   const updateEvent = async (event: ICalendarEvent) => {
-    try {
-      const updateItem :any= {
-        Title: event.title,
-        Location: event.locations,
-        EventDate: event.startTime.toISOString(),
-        EndDate: event.endTime.toISOString(),
-        Description: event.description, // Uncomment these fields
-        Category: event.category,
-        FreeBusy: event.freeBusy,
-        Overbook: event.checkDoubleBooking
-      };
-      
-      // Include recurrence data if it exists
-      if (event.RecurrenceData) {
-        updateItem.RecurrenceData = event.RecurrenceData;
-      }
-      
-      await sp.web.lists.getById(props.MarketingCalendarId).items.getById(parseInt(event.id)).update(updateItem);
-      loadEvents();
-    } catch (error) {
-      console.error('Error updating event:', error);
-    }
+    loadEvents();
   };
-  
+
 
   const deleteEvent = async (eventId: string) => {
     try {
@@ -1096,13 +1061,15 @@ export default function ModernCalendar(props: any) {
     return { year: eventYear, month: eventMonth };
   }
   const handleNavigate = (newDate: any, newiew: any) => {
+    setCurrentCalendarDate(newDate);
+    setCurrentCalendarView(newiew);
     const { year: currentYear, month: currentMonth } = getYearMonthFromDate(newDate);
     const filteredData = AllGeneratedevents.filter((event: any) => {
       const startDate = getYearMonthFromDate(event.startTime);
       const endDate = getYearMonthFromDate(event.endTime);
       return (
-        (startDate.year < currentYear || (startDate.year === currentYear && startDate.month <= currentMonth)) &&
-        (endDate.year > currentYear || (endDate.year === currentYear && endDate.month >= currentMonth))
+        (startDate.year < currentYear || (startDate.year === currentYear && startDate.month <=  (currentMonth == 1 ? 12 : currentMonth - 1))) &&
+        (endDate.year > currentYear || (endDate.year === currentYear && endDate.month >= (currentMonth == 12 ? 1 : currentMonth + 1)))
       );
     });
     setEvents(filteredData);
@@ -1143,6 +1110,7 @@ export default function ModernCalendar(props: any) {
           onSave={saveEvent}
           onDelete={deleteEvent}
           Context={props?.Context}
+          MarketingCalendarId={props?.MarketingCalendarId}
           onCancel={() => setShowModal(false)}
         />
       )}

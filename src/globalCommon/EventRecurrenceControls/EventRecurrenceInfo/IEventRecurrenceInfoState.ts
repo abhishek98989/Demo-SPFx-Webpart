@@ -16,4 +16,5 @@ export interface IEventRecurrenceInfoState {
   PeopleEmail:any
   defaultSelectedUsers:any
   UserDataIndex : any
+  parsedRecurrenceData?:any
 }

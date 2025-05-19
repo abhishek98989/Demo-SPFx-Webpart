@@ -8,10 +8,9 @@ export interface IEventRecurrenceInfoProps {
   context: any;
   siteUrl: string;
   selectedKey: any;
-  returnRecurrenceInfo:any;
   selectedRecurrenceRule: any;
   DueDate:any;
-  returnRecurrenceData?: (startDate: Date, endDate: Date, recurrenceData: string,userTitel: string, userId: number, userEmail:string,PatternType:string,selectdateRangeOption:any,dataIndex:any) => void;
+  returnRecurrenceInfo?: (startDate: Date, endDate: Date, recurrenceData: string,userTitel: string, userId: number, userEmail:string,PatternType:string,selectdateRangeOption:any,dataIndex:any) => void;
   deleteUserRecurence?:any
   useFor?:any
   recurrenceDataInfo?:any
@@ -19,5 +18,5 @@ export interface IEventRecurrenceInfoProps {
   dataIndex? : any
   setDeletedUserID?:any 
   removeChngeUserData?: any
-
+  parsedRecurrenceData?: any
 }

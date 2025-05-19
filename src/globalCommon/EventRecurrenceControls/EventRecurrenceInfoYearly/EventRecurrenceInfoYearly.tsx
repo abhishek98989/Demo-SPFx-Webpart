@@ -15,7 +15,7 @@ import {
 } from 'office-ui-fabric-react';
 import { DatePicker, DayOfWeek, IDatePickerStrings } from 'office-ui-fabric-react/lib/DatePicker';
 import { toLocaleShortDateString }  from '../utils/dateUtils';
-import { spfi } from "@pnp/sp";
+import { spfi, SPFx } from "@pnp/sp";
 import "@pnp/sp/webs";
 import "@pnp/sp/regional-settings/web";
 //import spservices from '../../services/spservices';
@@ -486,20 +486,21 @@ export class EventRecurrenceInfoYearly extends React.Component<IEventRecurrenceI
    */
  
   
-  public async getUtcTime(date: string | Date): Promise<string> {
+public async getUtcTime(date: string | Date): Promise<string> {
     try {
-      // Initialize PnPjs SPFI with your site URL
-      const sp = spfi(this.props.siteUrl);
-  
+      // Initialize PnPjs SPFI with your site URL and properly set up the observer
+      const sp = spfi(this.props.siteUrl).using(SPFx(this.props.context));
+
       // Ensure date is a Date object
       const dateObj = typeof date === "string" ? new Date(date) : date;
-  
+
       // Convert local time to UTC using the web's regional settings
-      const utcTime :any= await sp.web.regionalSettings.timeZone.localTimeToUTC(dateObj);
-  
+      const utcTime = await sp.web.regionalSettings.timeZone.localTimeToUTC(dateObj);
+
       // Return as ISO string, or format as needed
-      return utcTime.toISOString();
+      return new Date(utcTime).toISOString();
     } catch (error) {
+      console.error("Error converting time to UTC:", error);
       return Promise.reject(error);
     }
   }

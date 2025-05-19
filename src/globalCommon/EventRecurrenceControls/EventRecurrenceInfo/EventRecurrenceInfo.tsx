@@ -1,15 +1,13 @@
+// Modified EventRecurrenceInfo.tsx with improved recurrence pattern parsing
 import * as React from 'react';
-//import * as strings from 'CalendarWebPartStrings';
 import styles from './EventRecurrenceInfo.module.scss';
 import strings from '../constants/strings';
 import { IEventRecurrenceInfoProps } from './IEventRecurrenceInfoProps';
 import { IEventRecurrenceInfoState } from './IEventRecurrenceInfoState';
-//import { escape } from '@microsoft/sp-lodash-subset';
 import * as moment from 'moment';
 import {
   ChoiceGroup,
   IChoiceGroupOption,
-
 } from 'office-ui-fabric-react';
 import { PeoplePicker, PrincipalType } from "@pnp/spfx-controls-react/lib/PeoplePicker"
 import { SPHttpClient } from "@microsoft/sp-http";
@@ -18,24 +16,24 @@ import { EventRecurrenceInfoDaily } from './../EventRecurrenceInfoDaily/EventRec
 import { EventRecurrenceInfoWeekly } from './../EventRecurrenceInfoWeekly/EventRecurrenceInfoWeekly';
 import { EventRecurrenceInfoMonthly } from './../EventRecurrenceInfoMonthly/EventRecurrenceInfoMonthly';
 import { EventRecurrenceInfoYearly } from './../EventRecurrenceInfoYearly/EventRecurrenceInfoYearly';
+import { RecurrenceDataParser, IRecurrenceSettings } from './RecurrenceDataParser';
 
 let selectedPeople: any
 let userData: any = [];
 let chnagededUserIds :any = [];
 
-
 export class EventRecurrenceInfo extends React.Component<IEventRecurrenceInfoProps, IEventRecurrenceInfoState> {
+  private parsedRecurrenceSettings: IRecurrenceSettings | null = null;
+  
   public constructor(props: IEventRecurrenceInfoProps) {
-
     super(props);
-
 
     this._onRecurrenceFrequenceChange = this._onRecurrenceFrequenceChange.bind(this);
 
     this.state = {
       selectedKey: props?.selectedKey,
       selectPatern: 'every',
-      startDate: this.props?.startDate !=undefined ? this.props.startDate : moment().toDate(),
+      startDate: this.props?.startDate != undefined ? this.props.startDate : moment().toDate(),
       endDate: props?.DueDate != undefined ? props?.DueDate : moment().endOf('month').toDate(),
       numberOcurrences: '1',
       numberOfDays: '1',
@@ -49,7 +47,9 @@ export class EventRecurrenceInfo extends React.Component<IEventRecurrenceInfoPro
       PeopleName: props?.recurrenceData?.userTitle ? props?.recurrenceData?.userTitle : "",
       PeopleEmail: props?.recurrenceData?.userEmail ? props?.recurrenceData?.userEmail : " ",
       defaultSelectedUsers: this.props?.removeRecurrence ? [props?.recurrenceData?.userEmail] : [],
-      UserDataIndex : this.props.dataIndex
+      UserDataIndex: this.props.dataIndex,
+      // Add parsed recurrence pattern to state
+      parsedRecurrenceData: null
     };
   }
 
@@ -59,31 +59,36 @@ export class EventRecurrenceInfo extends React.Component<IEventRecurrenceInfoPro
     });
   }
 
-
   /**
-   *
-   *
-   * @memberof EventRecurrenceInfo
+   * Parse recurrence XML data into structured object
    */
-  componentDidMount() {
-    this.handaleselectedRecurrenceRule();
+  private parseRecurrenceData(recurrenceData: string): void {
+    if (!recurrenceData) return;
     
-    // If recurrence data is provided, parse it to determine which component to show
-    if (this.props.recurrenceData) {
-      // Determine recurrence type and select appropriate rule
-      if (this.props.recurrenceData.indexOf('<daily') !== -1) {
-        this.setState({ selectedRecurrenceRule: 'daily' });
-      } else if (this.props.recurrenceData.indexOf('<weekly') !== -1) {
-        this.setState({ selectedRecurrenceRule: 'weekly' });
-      } else if (this.props.recurrenceData.indexOf('<monthly') !== -1) {
-        this.setState({ selectedRecurrenceRule: 'monthly' });
-      } else if (this.props.recurrenceData.indexOf('<yearly') !== -1) {
-        this.setState({ selectedRecurrenceRule: 'yearly' });
-      }
+    try {
+      this.parsedRecurrenceSettings = RecurrenceDataParser.parseRecurrenceData(recurrenceData);
+      this.setState({ 
+        parsedRecurrenceData: this.parsedRecurrenceSettings,
+        selectedRecurrenceRule: this.parsedRecurrenceSettings?.recurrenceType || ''
+      });
+      
+      console.log('Parsed recurrence settings:', this.parsedRecurrenceSettings);
+    } catch (error) {
+      console.error('Error parsing recurrence data:', error);
     }
   }
 
-
+  /**
+   * Component mount lifecycle method
+   */
+  componentDidMount() {
+    // Parse recurrence data if available
+    if (this.props.recurrenceData) {
+      this.parseRecurrenceData(this.props.recurrenceData);
+    } else {
+      this.handaleselectedRecurrenceRule();
+    }
+  }
 
   handaleselectedRecurrenceRule() {
     if (!this.props?.removeRecurrence) {
@@ -133,16 +138,15 @@ export class EventRecurrenceInfo extends React.Component<IEventRecurrenceInfoPro
           });
 
           let isValidUser = this.props.recurrenceDataInfo.some((userData:any)=> userData.userId == userId?.[0])
-          if(isValidUser){
-               alert("Taggeduser")
-          }else{
+          if(isValidUser) {
+            alert("Taggeduser")
+          } else {
             this.setState({
               PeopleId: userId?.[0],
               PeopleName: userTitle?.[0],
               PeopleEmail: userMail?.[0]
             })
           }
-         
         }
       }
     } else {
@@ -155,16 +159,16 @@ export class EventRecurrenceInfo extends React.Component<IEventRecurrenceInfoPro
         });
 
         let isValidUser = this.props.recurrenceDataInfo.some((userData:any)=> userData.userId == userId?.[0])
-        if(isValidUser){
-             alert("Taggeduser")
-        }else{
+        if(isValidUser) {
+          alert("Taggeduser")
+        } else {
           this.setState({
             PeopleId: userId,
             PeopleName: userTitle,
             PeopleEmail: userMail
           })
         }
-      }else{
+      } else {
         chnagededUserIds.push(this.state.PeopleId)
         this.props.setDeletedUserID(chnagededUserIds)
         this.setState({
@@ -198,59 +202,52 @@ export class EventRecurrenceInfo extends React.Component<IEventRecurrenceInfoPro
     return userInfoArray;
   };
 
-
-
   /**
-   *
-   *
-   * @returns {React.ReactElement<IEventRecurrenceInfoProps>}
-   * @memberof EventRecurrenceInfo
+   * Render the component
    */
   public render(): React.ReactElement<IEventRecurrenceInfoProps> {
     return (
-      <div className={styles.divWrraper} >
-
-        <div className=' d-flex justify-content-between'>
-            <ChoiceGroup
-              label={strings.recurrenceInformationLabel}
-              // selectedKey={this.props?.removeRecurrence ? null: this.state.selectedRecurrenceRule}
-              selectedKey={this.props?.removeRecurrence ? this.state.selectedRecurrenceRule : ""}
-              disabled={this.props?.removeRecurrence ? false : true}
-              options={[
-                {
-                  key: 'daily',
-                  iconProps: { iconName: 'CalendarDay' },
-                  text: strings.dailyLabel
-                },
-                {
-                  key: 'weekly',
-                  iconProps: { iconName: 'CalendarWeek' },
-                  text: strings.weeklyLabel
-                },
-                {
-                  key: 'monthly',
-                  iconProps: { iconName: 'Calendar' },
-                  text: strings.monthlyLabel,
-
-                },
-                {
-                  key: 'yearly',
-                  iconProps: { iconName: 'Calendar' },
-                  text: strings.yearlyLabel,
-                }
-              ]}
-              onChange={this._onRecurrenceFrequenceChange}
-            />
+      <div className={styles.divWrraper}>
+        <div className='d-flex justify-content-between'>
+          <ChoiceGroup
+            label={strings.recurrenceInformationLabel}
+            selectedKey={this.props?.removeRecurrence ? this.state.selectedRecurrenceRule : ""}
+            disabled={this.props?.removeRecurrence ? false : true}
+            options={[
+              {
+                key: 'daily',
+                iconProps: { iconName: 'CalendarDay' },
+                text: strings.dailyLabel
+              },
+              {
+                key: 'weekly',
+                iconProps: { iconName: 'CalendarWeek' },
+                text: strings.weeklyLabel
+              },
+              {
+                key: 'monthly',
+                iconProps: { iconName: 'Calendar' },
+                text: strings.monthlyLabel,
+              },
+              {
+                key: 'yearly',
+                iconProps: { iconName: 'Calendar' },
+                text: strings.yearlyLabel,
+              }
+            ]}
+            onChange={this._onRecurrenceFrequenceChange}
+          />
             
-            {this.props?.recurrenceData?.userId && this.props?.useFor == "EditTaskPopup" && 
-              <div className='deleteUserData mt-4'>
-                <a className='hreflink siteColor me-1' >
-                  <span className='alignIcon svg__iconbox hreflink mini svg__icon--trash' title='Delete' onClick={() => this.props.deleteUserRecurence(this.state.UserDataIndex)}></span>
-                </a>
-              </div>}  
+          {this.props?.recurrenceData?.userId && this.props?.useFor == "EditTaskPopup" && 
+            <div className='deleteUserData mt-4'>
+              <a className='hreflink siteColor me-1'>
+                <span className='alignIcon svg__iconbox hreflink mini svg__icon--trash' title='Delete' onClick={() => this.props.deleteUserRecurence(this.state.UserDataIndex)}></span>
+              </a>
+            </div>
+          }  
         </div>
 
-        {this?.props?.removeRecurrence &&  this.props?.useFor == "EditTaskPopup" &&
+        {this?.props?.removeRecurrence && this.props?.useFor == "EditTaskPopup" &&
           <div className='PeoplePicker'>
             <PeoplePicker
               context={this.props.context}
@@ -262,128 +259,60 @@ export class EventRecurrenceInfo extends React.Component<IEventRecurrenceInfoPro
               showtooltip={true}
               required={true}
               defaultSelectedUsers={[this.props?.recurrenceData?.userEmail]}
-            // disabled={IsDisableField}
-            > </PeoplePicker>
+            />
           </div>
         }
 
+        {/* Daily recurrence component */}
+        {this.renderRecurrenceComponent('daily', EventRecurrenceInfoDaily)}
 
-{this.props.useFor == "EditTaskPopup" ?
-         ( this.state.selectedRecurrenceRule === 'daily' && this?.props?.removeRecurrence && this.state.PeopleName !== "" && (
-            <EventRecurrenceInfoDaily
-              display={true}
-              recurrenceData={this.props.recurrenceData?.recurrenceData}
-              startDate={this.state?.startDate}
-              context={this.props.context}
-              siteUrl={this.props.siteUrl}
-              endDate={this?.props?.DueDate != undefined ? this?.props?.DueDate : undefined}
-              returnRecurrenceData={this.props.returnRecurrenceData || (() => {})}
-              userName={this.state.PeopleName}
-              userId={this.state?.PeopleId}
-              PeopleEmail={this.state?.PeopleEmail}
-              UserDataIndex={this.state?.UserDataIndex}
-            />
-          ) ):
-         ( this.state.selectedRecurrenceRule === 'daily' && this?.props?.removeRecurrence && (
-            <EventRecurrenceInfoDaily
-              display={true}
-              recurrenceData={this.props.recurrenceData?.recurrenceData}
-              startDate={this.props.startDate}
-              context={this.props.context}
-              siteUrl={this.props.siteUrl}
-              DueDate={this?.props?.DueDate != undefined ? this?.props?.DueDate : undefined}
-                 returnRecurrenceData={this.props.returnRecurrenceData || (() => {})}
-            />
-          ))
-        }
+        {/* Weekly recurrence component */}
+        {this.renderRecurrenceComponent('weekly', EventRecurrenceInfoWeekly)}
 
-        {this.props.useFor == "EditTaskPopup" ?
-         ( this.state.selectedRecurrenceRule === 'weekly' && this?.props?.removeRecurrence && this.state.PeopleName !== "" && (
-            <EventRecurrenceInfoWeekly
-              display={true}
-              recurrenceData={this.props.recurrenceData?.recurrenceData}
-              startDate={this.state?.startDate}
-              context={this.props.context}
-              siteUrl={this.props.siteUrl}
-              endDate={this?.props?.DueDate != undefined ? this?.props?.DueDate : undefined}
-                 returnRecurrenceData={this.props.returnRecurrenceData || (() => {})}
-              userName={this.state.PeopleName}
-              userId={this.state.PeopleId}
-              PeopleEmail={this.state.PeopleEmail}
-              UserDataIndex={this.state?.UserDataIndex}
+        {/* Monthly recurrence component */}
+        {this.renderRecurrenceComponent('monthly', EventRecurrenceInfoMonthly)}
 
-            />)
-          ) :
-          (this.state.selectedRecurrenceRule === 'weekly' && this?.props?.removeRecurrence  && (
-            <EventRecurrenceInfoWeekly
-              display={true}
-              recurrenceData={this.props.recurrenceData?.recurrenceData}
-              startDate={this.props.startDate}
-              context={this.props.context}
-              siteUrl={this.props.siteUrl}
-              DueDate={this?.props?.DueDate != undefined ? this?.props?.DueDate : undefined}
-                 returnRecurrenceData={this.props.returnRecurrenceData || (() => {})}
-            />
-          ) )
-        }
-
-        {this.props.useFor == "EditTaskPopup" ?
-          (this.state.selectedRecurrenceRule === 'monthly' && this?.props?.removeRecurrence && this.state.PeopleName !== "" && (
-            <EventRecurrenceInfoMonthly
-              display={true}
-              recurrenceData={this.props.recurrenceData?.recurrenceData}
-              startDate={this.state?.startDate}
-              context={this.props.context}
-              siteUrl={this.props.siteUrl}
-              endDate={this?.props?.DueDate != undefined ? this?.props?.DueDate : undefined}
-                 returnRecurrenceData={this.props.returnRecurrenceData || (() => {})}
-              userName={this.state.PeopleName}
-              userId={this.state.PeopleId}
-              PeopleEmail={this.state.PeopleEmail}
-              UserDataIndex={this.state?.UserDataIndex}
-            />)
-          ) :
-          (this.state.selectedRecurrenceRule === 'monthly' && this?.props?.removeRecurrence  && (
-            <EventRecurrenceInfoMonthly
-              display={true}
-              recurrenceData={this.props.recurrenceData?.recurrenceData}
-              startDate={this.props.startDate}
-              context={this.props.context}
-              siteUrl={this.props.siteUrl}
-              DueDate={this?.props?.DueDate != undefined ? this?.props?.DueDate : undefined}
-                 returnRecurrenceData={this.props.returnRecurrenceData || (() => {})}
-            />)
-          ) 
-        }
-        {this.props.useFor == "EditTaskPopup" ?
-         ( this.state.selectedRecurrenceRule === 'yearly' && this?.props?.removeRecurrence && this.state.PeopleName !== "" && (
-            <EventRecurrenceInfoYearly
-              display={true}
-              recurrenceData={this.props.recurrenceData?.recurrenceData}
-              startDate={this.state?.startDate}
-              context={this.props.context}
-              siteUrl={this.props.siteUrl}
-              endDate={this?.props?.DueDate != undefined ? this?.props?.DueDate : undefined}
-                 returnRecurrenceData={this.props.returnRecurrenceData || (() => {})}
-              userName={this.state.PeopleName}
-              userId={this.state.PeopleId}
-              PeopleEmail={this.state.PeopleEmail}
-              UserDataIndex={this.state?.UserDataIndex}
-            />)
-          ) :
-          ( this.state.selectedRecurrenceRule === 'yearly' && this?.props?.removeRecurrence  && (
-            <EventRecurrenceInfoYearly
-              display={true}
-              recurrenceData={this.props.recurrenceData?.recurrenceData}
-              startDate={this.props.startDate}
-              context={this.props.context}
-              siteUrl={this.props.siteUrl}
-              DueDate={this?.props?.DueDate != undefined ? this?.props?.DueDate : undefined}
-                 returnRecurrenceData={this.props.returnRecurrenceData || (() => {})}
-            />)
-          ) 
-        }
+        {/* Yearly recurrence component */}
+        {this.renderRecurrenceComponent('yearly', EventRecurrenceInfoYearly)}
       </div>
     );
+  }
+
+  /**
+   * Helper to render the appropriate recurrence component based on type
+   */
+  private renderRecurrenceComponent(type: string, Component: any) {
+    const shouldRender = this.state.selectedRecurrenceRule === type && this.props?.removeRecurrence;
+    
+    if (!shouldRender) return null;
+    
+    // Determine if we need to check for people selection based on the useFor prop
+    const needsPeopleCheck = this.props.useFor === "EditTaskPopup";
+    const hasPeople = !needsPeopleCheck || this.state.PeopleName !== "";
+    
+    if (needsPeopleCheck && !hasPeople) return null;
+    
+    const commonProps = {
+      display: true,
+      recurrenceData: this.props.recurrenceData?.recurrenceData,
+      startDate: needsPeopleCheck ? this.state?.startDate : this.props.startDate,
+      context: this.props.context,
+      siteUrl: this.props.siteUrl,
+      endDate: this?.props?.DueDate,
+      DueDate: this?.props?.DueDate,
+      returnRecurrenceData: this.props.returnRecurrenceInfo || (() => {}),
+      // If parsed data is available, pass it to the component
+      parsedRecurrenceSettings: this.parsedRecurrenceSettings
+    };
+    
+    // Add people-specific props if needed
+    const peopleProps = needsPeopleCheck ? {
+      userName: this.state.PeopleName,
+      userId: this.state.PeopleId,
+      PeopleEmail: this.state.PeopleEmail,
+      UserDataIndex: this.state.UserDataIndex
+    } : {};
+    
+    return <Component {...commonProps} {...peopleProps} />;
   }
 }

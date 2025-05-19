@@ -1,4 +1,4 @@
-import * as React from 'react'; 
+import * as React from 'react';
 //import styles from './EventRecurrenceInfoDaily.module.scss';
 import strings from '../constants/strings';
 import { IEventRecurrenceInfoDailyProps } from './IEventRecurrenceInfoDailyProps';
@@ -14,7 +14,7 @@ import {
 } from 'office-ui-fabric-react';
 import { DatePicker, DayOfWeek, IDatePickerStrings } from 'office-ui-fabric-react/lib/DatePicker';
 import { toLocaleShortDateString } from '../utils/dateUtils';
-import { spfi } from "@pnp/sp";
+import { spfi, SPFx } from "@pnp/sp";
 import "@pnp/sp/webs";
 import "@pnp/sp/regional-settings/web";
 
@@ -69,10 +69,10 @@ export class EventRecurrenceInfoDaily extends React.Component<IEventRecurrenceIn
       errorMessageNumberOcurrences: '',
       errorMessageNumberOfDays: '',
       PatternType: "Daily",
-      selectedPeople : this.props.userName,
-      selectedPeopleEmail : this.props.PeopleEmail,
-      selectedPeopleId : this.props.userId,
-      UserDataIndex:this.props?.UserDataIndex
+      selectedPeople: this.props.userName,
+      selectedPeopleEmail: this.props.PeopleEmail,
+      selectedPeopleId: this.props.userId,
+      UserDataIndex: this.props?.UserDataIndex
     };
 
     //
@@ -189,7 +189,7 @@ export class EventRecurrenceInfoDaily extends React.Component<IEventRecurrenceIn
       }
     );
   }
- 
+
 
   private onPatternChange(
     ev: React.SyntheticEvent<HTMLElement>,
@@ -222,7 +222,7 @@ export class EventRecurrenceInfoDaily extends React.Component<IEventRecurrenceIn
     let patern: any = {};
     let dateRange: { repeatForever?: string, repeatInstances?: string, windowEnd?: Date } = {};
     let dailyPatern: { dayFrequency?: string, weekDay?: string } = {};
-    let recurrenceRule: string='';
+    let recurrenceRule: string = '';
 
     if (this.props.recurrenceData) {
 
@@ -321,7 +321,7 @@ export class EventRecurrenceInfoDaily extends React.Component<IEventRecurrenceIn
       `</repeat>${selectDateRangeOption}</rule></recurrence>`;
     //  console.log(recurrenceXML);
     //endDate change
-    this.props.returnRecurrenceData(this.state.startDate, this.state.endDate, recurrenceXML, this.state?.selectedPeople,this.state?.selectedPeopleId,this.state?.selectedPeopleEmail, this.state.PatternType,this.state.selectdateRangeOption,this.state?.UserDataIndex);
+    this.props.returnRecurrenceData(this.state.startDate, this.state.endDate, recurrenceXML, this.state?.selectedPeople, this.state?.selectedPeopleId, this.state?.selectedPeopleEmail, this.state.PatternType, this.state.selectdateRangeOption, this.state?.UserDataIndex);
   }
   /**
    *
@@ -330,23 +330,24 @@ export class EventRecurrenceInfoDaily extends React.Component<IEventRecurrenceIn
    * @memberof spservices
    */
 
-public async getUtcTime(date: string | Date): Promise<string> {
-  try {
-    // Initialize PnPjs SPFI with your site URL
-    const sp = spfi(this.props.siteUrl);
+  public async getUtcTime(date: string | Date): Promise<string> {
+    try {
+      // Initialize PnPjs SPFI with your site URL and properly set up the observer
+      const sp = spfi(this.props.siteUrl).using(SPFx(this.props.context));
 
-    // Ensure date is a Date object
-    const dateObj = typeof date === "string" ? new Date(date) : date;
+      // Ensure date is a Date object
+      const dateObj = typeof date === "string" ? new Date(date) : date;
 
-    // Convert local time to UTC using the web's regional settings
-    const utcTime :any= await sp.web.regionalSettings.timeZone.localTimeToUTC(dateObj);
+      // Convert local time to UTC using the web's regional settings
+      const utcTime = await sp.web.regionalSettings.timeZone.localTimeToUTC(dateObj);
 
-    // Return as ISO string, or format as needed
-    return utcTime.toISOString();
-  } catch (error) {
-    return Promise.reject(error);
+      // Return as ISO string, or format as needed
+      return new Date(utcTime).toISOString();
+    } catch (error) {
+      console.error("Error converting time to UTC:", error);
+      return Promise.reject(error);
+    }
   }
-}
 
   /**
    *
