@@ -16651,3 +16651,20 @@ _LocalBinding */
   padding: 10px;
   background-color: #fff;
 }
+.rbc-event.yellow {
+    background-color: #ffff00 !important;
+    color: #000000 !important;
+}
+.rbc-event.green {
+    background-color: #107c10 !important;
+}
+.rbc-event.orange {
+    background-color: #da3b01 !important;
+}
+.rbc-event.purple {
+    background-color: #c239b3 !important;
+}
+.rbc-event.grey {
+    background-color: #adadad !important;
+    color: #000000 !important;
+}

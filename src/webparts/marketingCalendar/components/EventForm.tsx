@@ -171,15 +171,13 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       props.onDelete(formData.id);
     }
   };
-
   const categoryOptions: IDropdownOption[] = [
     { key: 'Meeting', text: 'Meeting' },
-    { key: 'Work hours', text: 'Work hours' },
-    { key: 'Gifts', text: 'Gifts' },
-    { key: 'Business', text: 'Business' },
-    { key: 'Birthday', text: 'Birthday' },
-    { key: 'Get-together', text: 'Get-together' },
-    { key: 'Anniversary', text: 'Anniversary' }
+    { key: 'RFQ', text: 'RFQ' },
+    { key: 'RFP', text: 'RFP' },
+    { key: 'CSP/Traditional', text: 'CSP/Traditional' },
+    { key: 'DB', text: 'DB' },
+    { key: 'Interview', text: 'Interview' }
   ];
 
   const freeBusyOptions: IDropdownOption[] = [
