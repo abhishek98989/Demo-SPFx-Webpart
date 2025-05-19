@@ -1102,11 +1102,11 @@ export default function ModernCalendar(props: any) {
 
 
   // Custom event component renderer
-  const customEventPropGetter = (event: ICalendarEvent) => {
-    return {
-      className: event.category ? `event-${event.category.toLowerCase()}` : '',
-    };
-  };
+  // const customEventPropGetter = (event: ICalendarEvent) => {
+  //   return {
+  //     className: event.category ? `event-${event.category.toLowerCase()}` : '',
+  //   };
+  // };
 
   // Handle showing the panel with all events for a date
   const handleShowMoreEvents = (events: ICalendarEvent[], date: Date) => {
@@ -1226,6 +1226,20 @@ export default function ModernCalendar(props: any) {
     },
     eventWrapper: ({ children }:any) => <>{children}</>,
   };
+  const eventStyleGetter = (event: any, start: any, end: any, isSelecte: any) => {
+    const style = {
+      backgroundColor: event.Color, // Set the background color based on the color property in the event data
+      borderRadius: "0px",
+      opacity: 0.8,
+      color: event.FontColor,
+      border: "0px",
+      display: "block",
+    };
+    return {
+      style,
+    };
+  };
+
   return (
     <div className={'modernCalendar'}>
       <div className={'container'}>
@@ -1240,6 +1254,7 @@ export default function ModernCalendar(props: any) {
                   start: event.startTime,
                   end: event.endTime
                 }))}
+                eventPropGetter={eventStyleGetter}
                 startAccessor="startTime"
                 endAccessor="endTime"
                 titleAccessor="title"
@@ -1249,7 +1264,6 @@ export default function ModernCalendar(props: any) {
                 onSelectSlot={handleSelectSlot}
                 onNavigate={handleNavigate}
                 views={['month', 'week', 'day', 'agenda']}
-                eventPropGetter={customEventPropGetter}
                 components={components}
               />
             </div>
