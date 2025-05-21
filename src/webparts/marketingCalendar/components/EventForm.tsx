@@ -8,7 +8,10 @@ import {
   Stack,
   IStackTokens,
   IStackStyles,
-  Label
+  Label,
+  MessageBar,
+  MessageBarType,
+  DayOfWeek
 } from '@fluentui/react';
 import { TextField } from '@fluentui/react/lib/TextField';
 import { DatePicker } from '@fluentui/react/lib/DatePicker';
@@ -20,12 +23,14 @@ import { EventRecurrenceInfo } from '../../../globalCommon/EventRecurrenceContro
 import { spfi, SPFx } from '@pnp/sp';
 import { parseRecurrenceToString } from './reccurenceStringToText';
 import moment from 'moment';
+
 const stackTokens: IStackTokens = { childrenGap: 12 };
 const stackStyles: IStackStyles = {
   root: {
     padding: '0 0 12px 0',
   },
 };
+
 interface IEventFormProps {
   event: ICalendarEvent | null;
   isNew: boolean;
@@ -44,7 +49,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
     title: '',
     locations: '',
     startTime: new Date(),
-    endTime: new Date(),
+    endTime: new Date(new Date().getTime() + 60 * 60 * 1000), // Default end time is 1 hour after start
     description: '',
     attendees: [],
     category: '',
@@ -68,10 +73,12 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
   const [recurrenceData, setRecurrenceData] = React.useState(null);
   const [isEditingRecurrence, setIsEditingRecurrence] = useState<boolean>(false);
   const [tempRecurrenceData, setTempRecurrenceData] = useState<any | undefined>();
+  const [timeError, setTimeError] = useState<string | null>(null);
+
   useEffect(() => {
     if (props.event) {
       setFormData({ ...props.event });
-      if(props.event.fAllDayEvent==true){
+      if(props.event.fAllDayEvent === true){
         setIsAllDay(true);
       }
       // Check if this is a recurring event by looking for RecurrenceData
@@ -84,13 +91,33 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
     }
   }, [props.event]);
 
+  // Validate dates whenever they change
+  useEffect(() => {
+    validateDates();
+  }, [formData.startTime, formData.endTime]);
+
+  const validateDates = () => {
+    if (formData.endTime < formData.startTime) {
+      // Automatically fix the end date/time to be after start date/time
+      const newEndTime = new Date(formData.startTime.getTime() + 60 * 60 * 1000); // 1 hour after start time
+      setFormData(prevData => ({
+        ...prevData,
+        endTime: newEndTime
+      }));
+      setTimeError("End time must be after start time. It has been automatically adjusted.");
+    } else {
+      setTimeError(null);
+    }
+  };
+
   const handleInputChange = (field: keyof ICalendarEvent, value: any): void => {
     setFormData(prevData => ({
       ...prevData,
       [field]: value
     }));
   };
-  const getUtcTime=async (date: string | Date): Promise<string>=> {
+
+  const getUtcTime = async (date: string | Date): Promise<string> => {
     try {
       // Initialize PnPjs SPFI with your site URL and properly set up the observer
 
@@ -107,7 +134,14 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       return Promise.reject(error);
     }
   }
+
   const handleSave = async () => {
+    // Validate dates before saving
+    if (formData.endTime < formData.startTime) {
+      setTimeError("End time must be after start time.");
+      return;
+    }
+
     const eventToSave = { ...formData };
 
     // Include recurrence data if it exists
@@ -116,38 +150,39 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
     } else if (recurrenceData && editRecurrenceEvent) {
       eventToSave.RecurrenceData = recurrenceData;
     }
-    try {
-       let Item: any = {
-      Title: eventToSave.title,
-      Location: eventToSave.locations,
-      Description: eventToSave.description,
-      Category: eventToSave.category,
-      fAllDayEvent: isAllDay,
-    };
-
-    // Format dates properly based on whether it's an all-day event or not
-    if (isAllDay) {
-      // For SharePoint all-day events, both start and end dates should be the same day
-      // Extract just the date portion without any timezone conversion
-      const dateOnly = moment(eventToSave.startTime).format('YYYY-MM-DD');
-      
-      // Set both start and end time to the same date at 00:00:00 and WITHOUT 'Z' suffix
-      Item.EventDate = `${dateOnly}T00:00:00`;
-      Item.EndDate = `${dateOnly}T23:59:59`;  // End of the same day
-      
-      // Make sure the all-day flag is set
-      Item.fAllDayEvent = true;
-    } else {
-      // For regular events with specific times
-      Item.EventDate = moment(eventToSave.startTime, 'YYYY-MM-DD HH:mm:ss').format('YYYY-MM-DDTHH:mm:ss') + 'Z';
-      Item.EndDate = moment(eventToSave.endTime, 'YYYY-MM-DD HH:mm:ss').format('YYYY-MM-DDTHH:mm:ss') + 'Z';
-    }
-
-    // Include recurrence data if it exists
-    if (eventToSave.RecurrenceData) {
-      Item.RecurrenceData = eventToSave.RecurrenceData;
-    }
     
+    try {
+      let Item: any = {
+        Title: eventToSave.title,
+        Location: eventToSave.locations,
+        Description: eventToSave.description,
+        Category: eventToSave.category,
+        fAllDayEvent: isAllDay,
+      };
+
+      // Format dates properly based on whether it's an all-day event or not
+      if (isAllDay) {
+        // For SharePoint all-day events, both start and end dates should be the same day
+        // Extract just the date portion without any timezone conversion
+        const dateOnly = moment(eventToSave.startTime).format('YYYY-MM-DD');
+        
+        // Set both start and end time to the same date at 00:00:00 and WITHOUT 'Z' suffix
+        Item.EventDate = `${dateOnly}T00:00:00`;
+        Item.EndDate = `${dateOnly}T23:59:59`;  // End of the same day
+        
+        // Make sure the all-day flag is set
+        Item.fAllDayEvent = true;
+      } else {
+        // For regular events with specific times
+        Item.EventDate = moment(eventToSave.startTime, 'YYYY-MM-DD HH:mm:ss').format('YYYY-MM-DDTHH:mm:ss') + 'Z';
+        Item.EndDate = moment(eventToSave.endTime, 'YYYY-MM-DD HH:mm:ss').format('YYYY-MM-DDTHH:mm:ss') + 'Z';
+      }
+
+      // Include recurrence data if it exists
+      if (eventToSave.RecurrenceData) {
+        Item.RecurrenceData = eventToSave.RecurrenceData;
+      }
+      
       if (props.isNew) {
         await sp.web.lists.getById(props.MarketingCalendarId).items.add(Item).then((response: any) => {
           console.log('Item Added successfully:', response);
@@ -159,18 +194,17 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
           props.onSave(eventToSave);
         })
       }
-
-
     } catch (error) {
       console.error('Error creating event:', error);
     }
-
   };
+
   const handleDelete = (): void => {
     if (formData.id && !props.isNew) {
       props.onDelete(formData.id);
     }
   };
+
   const categoryOptions: IDropdownOption[] = [
     { key: 'Meeting', text: 'Meeting' },
     { key: 'RFQ', text: 'RFQ' },
@@ -187,17 +221,67 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
     { key: 'Out of Office', text: 'Out of Office' }
   ];
 
-  const dialogContentProps = {
-    type: DialogType.normal,
-    title: props.isNew ? 'Add New Event' : 'Edit Event',
+  // Function to disable past dates or dates before start date
+  const onRenderStartDatePickerDay = (date: Date): JSX.Element => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return <div>{date.getDate()}</div>;
   };
+
+  const onRenderEndDatePickerDay = (date: Date): JSX.Element => {
+    const startDate = new Date(formData.startTime);
+    startDate.setHours(0, 0, 0, 0);
+    
+    // For end date, disable dates before the start date
+    const isBeforeStartDate = date < startDate;
+    
+    return (
+      <div style={isBeforeStartDate ? { color: '#d0d0d0', fontWeight: 'normal' } : {}}>
+        {date.getDate()}
+      </div>
+    );
+  };
+
+  // Custom function to handle time change safely
+  const handleTimeChange = (field: 'startTime' | 'endTime', newTime: Date | null) => {
+    if (!newTime) return;
+    
+    try {
+      const currentDate = formData[field];
+      const updatedDate = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        currentDate.getDate(),
+        newTime.getHours(),
+        newTime.getMinutes(),
+        0
+      );
+      
+      handleInputChange(field, updatedDate);
+      
+      // If updating start time, check if we need to adjust end time
+      if (field === 'startTime') {
+        const currentEndTime = formData.endTime;
+        
+        // If new start time is later than end time, adjust end time
+        if (updatedDate >= currentEndTime) {
+          const newEndTime = new Date(updatedDate.getTime() + 60 * 60 * 1000); // 1 hour later
+          handleInputChange('endTime', newEndTime);
+        }
+      }
+    } catch (error) {
+      console.error(`Error updating ${field}:`, error);
+    }
+  };
+
   const returnRecurrenceInfo = (startDate: Date, endDate: Date, recurrenceData: string) => {
     const returnedRecurrenceInfo = {
       recurrenceData: recurrenceData,
       eventDate: startDate,
       endDate: endDate,
     };
-    if (props.isNew || props.event?.RecurrenceData==null) {
+    if (props.isNew || props.event?.RecurrenceData == null) {
       setFormData((prevData) => ({
         ...prevData,
         RecurrenceData: returnedRecurrenceInfo?.recurrenceData,
@@ -209,6 +293,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
 
     console.log(returnedRecurrenceInfo);
   };
+
   const handleRecurrenceCheck = (
     ev: React.FormEvent<HTMLElement | HTMLInputElement>,
     recurChecked: boolean
@@ -217,6 +302,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
     setShowRecurrenceSeriesInfo(recurChecked);
     setNewRecurrenceEvent(recurChecked);
   };
+
   const getRecurrenceType = (recurrenceData: any) => {
     if (!recurrenceData) return '';
     if (recurrenceData.indexOf('<daily') !== -1) return 'daily';
@@ -225,6 +311,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
     if (recurrenceData.indexOf('<yearly') !== -1) return 'yearly';
     return '';
   };
+
   const saveRecurrenceChanges = () => {
     setRecurrenceData(tempRecurrenceData?.recurrenceData);
     setReturnedRecurrenceInfo(tempRecurrenceData);
@@ -244,9 +331,11 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
     setTempRecurrenceData(recurrenceData);
     setIsEditingRecurrence(true);
   };
+
   const getRecurrenceRule = (recurrenceData: any) => {
     return getRecurrenceType(recurrenceData); // Same as type for this use case
   };
+
   const renderFooterContent = () => (
     <Stack horizontal tokens={{ childrenGap: 8 }} horizontalAlign="end">
       <PrimaryButton onClick={handleSave} text="Save" />
@@ -254,6 +343,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       <DefaultButton onClick={props.onCancel} text="Cancel" />
     </Stack>
   );
+
   return (
     <Panel
       isOpen={true}
@@ -261,7 +351,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       headerText={props.isNew ? "Add Event" : "Edit Event"}
       type={PanelType.medium}
       onRenderFooterContent={renderFooterContent}
-  isFooterAtBottom={true} 
+      isFooterAtBottom={true} 
     >
       <Stack tokens={stackTokens} styles={stackStyles}>
         <TextField
@@ -277,6 +367,16 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
           onChange={(_, value) => handleInputChange('locations', value)}
         />
 
+        {timeError && (
+          <MessageBar
+            messageBarType={MessageBarType.warning}
+            isMultiline={false}
+            dismissButtonAriaLabel="Close"
+          >
+            {timeError}
+          </MessageBar>
+        )}
+
         <Stack horizontal tokens={stackTokens}>
           <Stack.Item grow={1}>
             <DatePicker
@@ -289,6 +389,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
                   handleInputChange('startTime', newDate);
                 }
               }}
+              firstDayOfWeek={DayOfWeek.Sunday}
             />
           </Stack.Item>
           <Stack.Item grow={1}>
@@ -296,11 +397,12 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
               <TimePicker
                 label="Start Time"
                 value={formData.startTime}
-                onChange={(time) => {
+                onChange={(_, time) => {
                   if (time) {
-                    handleInputChange('startTime', time);
+                    handleTimeChange('startTime', time);
                   }
                 }}
+                increments={15}
               />
             )}
           </Stack.Item>
@@ -313,11 +415,16 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
               value={formData.endTime}
               onSelectDate={(date) => {
                 if (date) {
-                  const newDate = new Date(formData.endTime);
-                  newDate.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-                  handleInputChange('endTime', newDate);
+                  // Only allow dates on or after the start date
+                  if (date >= new Date(formData.startTime.setHours(0, 0, 0, 0))) {
+                    const newDate = new Date(formData.endTime);
+                    newDate.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+                    handleInputChange('endTime', newDate);
+                  }
                 }
               }}
+              firstDayOfWeek={DayOfWeek.Sunday}
+              minDate={formData.startTime}
             />
           </Stack.Item>
           <Stack.Item grow={1}>
@@ -325,11 +432,12 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
               <TimePicker
                 label="End Time"
                 value={formData.endTime}
-                onChange={(time) => {
+                onChange={(_, time) => {
                   if (time) {
-                    handleInputChange('endTime', time);
+                    handleTimeChange('endTime', time);
                   }
                 }}
+                increments={15}
               />
             )}
           </Stack.Item>
@@ -379,7 +487,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
           <Stack tokens={stackTokens}>
             <Label>Recurrence Pattern</Label>
             <Stack horizontal verticalAlign="center">
-              < >{parseRecurrenceToString(recurrenceData)}</>
+              <>{parseRecurrenceToString(recurrenceData)}</>
               <IconButton
                 iconProps={{ iconName: 'Edit' }}
                 title="Edit recurrence"
@@ -399,10 +507,10 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
               endDate={formData.endTime}
               returnRecurrenceInfo={returnRecurrenceInfo}
               siteUrl={props.Context.pageContext.web.absoluteUrl}
-              recurrenceData={!isEditingRecurrence ? recurrenceData:''}
+              recurrenceData={!isEditingRecurrence ? recurrenceData : ''}
               removeRecurrence={true}  // Enable editing of recurrence
-              selectedRecurrenceRule={!isEditingRecurrence? getRecurrenceRule(returnedRecurrenceInfo?.recurrenceData):''}
-              selectedKey={!isEditingRecurrence? getRecurrenceType(returnedRecurrenceInfo?.recurrenceData):''}
+              selectedRecurrenceRule={!isEditingRecurrence ? getRecurrenceRule(returnedRecurrenceInfo?.recurrenceData) : ''}
+              selectedKey={!isEditingRecurrence ? getRecurrenceType(returnedRecurrenceInfo?.recurrenceData) : ''}
               display={true}  // Provide a valid value for 'display'
               DueDate={formData.endTime}  // Provide a valid value for 'DueDate'
             />
@@ -415,9 +523,6 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
             )}
           </Stack>
         )}
-
-
-
       </Stack>
     </Panel>
   );
