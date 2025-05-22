@@ -3,6 +3,7 @@ import styles from './MarketingCalendar.module.scss';
 import type { IMarketingCalendarProps } from './IMarketingCalendarProps';
 import { escape } from '@microsoft/sp-lodash-subset';
 import { Calendar } from '@fluentui/react';
+import { GlobalLoaderProvider } from '../../../globalCommon/customLoader';
 import ModernCalendar from './CalendarEvent'; // Adjust the path as needed
 
 export default class MarketingCalendar extends React.Component<IMarketingCalendarProps> {
@@ -16,7 +17,9 @@ export default class MarketingCalendar extends React.Component<IMarketingCalenda
     } = this.props;
 
     return (
+      <GlobalLoaderProvider>
       <ModernCalendar Context={this.props.Context} MarketingCalendarId={this.props.MarketingCalendarId}/>
+      </GlobalLoaderProvider>
     );
   }
 }

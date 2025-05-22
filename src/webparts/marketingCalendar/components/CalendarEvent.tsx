@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import EventForm from './EventForm';
 import moment from 'moment';
+import { useGlobalLoaderContext } from '../../../globalCommon/customLoader';
 export interface ICalendarEvent {
   id: string;
   title: string;
@@ -37,6 +38,7 @@ let AllGeneratedevents: any = [];
 const localizer = momentLocalizer(moment);
 
 export default function ModernCalendar(props: any) {
+  const { showLoader, hideLoader } = useGlobalLoaderContext();
   const [events, setEvents] = useState<ICalendarEvent[]>([]);
   const [showModal, setShowModal] = useState<boolean>(false);
   const [selectedEvent, setSelectedEvent] = useState<ICalendarEvent | null>(null);
@@ -49,6 +51,7 @@ export default function ModernCalendar(props: any) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   useEffect(() => {
     if (props.MarketingCalendarId) {
+      showLoader('Loading...');
       loadEvents();
     }
   }, [props.MarketingCalendarId]);
@@ -56,6 +59,7 @@ export default function ModernCalendar(props: any) {
   const loadEvents = async (): Promise<void> => {
     if (!props.MarketingCalendarId) {
       console.error('List name not provided');
+      hideLoader();
       return;
     }
 
@@ -102,6 +106,7 @@ export default function ModernCalendar(props: any) {
       handleNavigate(currentCalendarDate, currentCalendarView)
       // setEvents(AllGeneratedevents);
     } catch (error) {
+      hideLoader();
       console.error('Error loading events:', error);
     }
   };
@@ -1065,10 +1070,12 @@ export default function ModernCalendar(props: any) {
   };
 
   const createEvent = async (event: ICalendarEvent) => {
+    showLoader('Loading...');
     loadEvents();
   };
 
   const updateEvent = async (event: ICalendarEvent) => {
+    showLoader('Loading...');
     loadEvents();
   };
 
@@ -1111,10 +1118,10 @@ export default function ModernCalendar(props: any) {
         // 2. It ends after the start of the displayed period
         return event.startTime <= end && event.endTime >= start;
       });
-
+      hideLoader();
       setEvents(filteredEvents);
     } else {
-      // For other views (week, day, agenda), filter based on the active period
+      hideLoader();
       setEvents(AllGeneratedevents);
     }
   };
