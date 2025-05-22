@@ -28,9 +28,7 @@ const spinnerContainerStyles = mergeStyles({
   alignItems: 'center',
   gap: '16px',
   padding: '24px',
-  backgroundColor: 'white',
   borderRadius: '8px',
-  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
   minWidth: '200px'
 });
 
