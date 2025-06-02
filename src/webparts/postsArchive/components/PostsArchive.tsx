@@ -353,7 +353,7 @@ const PostsArchive: React.FC<IPostsArchiveProps> = (props) => {
           />
 
           <div className={styles.slideContent}>
-            <div className={styles.slideCard} style={{ maxHeight: '400px', overflow: 'hidden' }}>
+            <div className={styles.slideCard} >
               {/* Title */}
               <h3 className={styles.slideTitle}>{currentItem.Title}</h3>
               
@@ -361,9 +361,9 @@ const PostsArchive: React.FC<IPostsArchiveProps> = (props) => {
               <p className={styles.slideRegion}>{currentItem.Region}</p>
               
               {/* Description - Truncated */}
-              {/* <div className={styles.slideDescription}>
-                <div dangerouslySetInnerHTML={{ __html: currentItem?.Description }} />
-              </div> */}
+              <div className={styles.slideDescription}>
+                <div dangerouslySetInnerHTML={{ __html: currentItem.Description }} />
+              </div>
 
               {/* Images */}
               {currentItem.Images && (

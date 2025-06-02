@@ -9,3 +9,6 @@
     top: -35px !important;
     right: 0px;
 }
+#CommentsWrapper {
+    display: none !important;
+}

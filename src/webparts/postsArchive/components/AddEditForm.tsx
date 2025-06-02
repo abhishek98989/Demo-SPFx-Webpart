@@ -11,6 +11,7 @@ import {
   PrimaryButton,
   DefaultButton,
   MessageBar,
+  
   MessageBarType,
   Label,
   Stack,
@@ -279,7 +280,15 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
     }
     setCurrentViewFile(null);
   };
-
+  const DeleteButton = ({ onDelete }:any) => (
+    <IconButton
+      iconProps={{ iconName: 'Delete' }}
+      title="Delete"
+      ariaLabel="Delete"
+      onClick={onDelete}
+      styles={{ root: { color: 'red' } }}
+    />
+  );
   const getFileIcon = (fileName: string): string => {
     const extension = fileName.split('.').pop()?.toLowerCase();
     if (extension === 'pdf') {
@@ -316,7 +325,7 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
       } else {
         // Create new item
         const result = await createItem(formData);
-        itemId = result.data.Id;
+        itemId = result.Id;
         setMessage({
           text: 'Post created successfully!',
           type: MessageBarType.success
@@ -462,12 +471,17 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
   async function deleteItem(id: number): Promise<void> {
     try {
       // Get item details before deletion for logging
-      
-      await sp.web.lists
-        .getById(props.listId)
-        .items
-        .getById(id)
-        .recycle();
+   if(confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
+    await sp.web.lists
+    .getById(props.listId)
+    .items
+    .getById(id)
+    .recycle();
+    setTimeout(() => {
+        props.onSave();
+        props.onDismiss();
+      }, 1500);
+   }
       
       } catch (error) {
       console.error("Error deleting item:", error);
@@ -513,6 +527,24 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
     <div className='d-flex footerInfo justify-content-between'>
         {renderUserInfo()}
         <Stack horizontal tokens={{ childrenGap: 10 }}>
+        
+     {props?.item?.Id &&<DefaultButton
+    text="Delete"
+    styles={{
+      root: {
+        backgroundColor: '#e0e0e0', // light grey
+        color: '#000',
+        border: '1px solid #c8c8c8',
+      },
+      rootHovered: {
+        backgroundColor: '#d0d0d0',
+      },
+      rootPressed: {
+        backgroundColor: '#c0c0c0',
+      },
+    }}
+    onClick={() => deleteItem(props?.item?.Id)}
+  />}
       <PrimaryButton
         text={props.item ? 'Update' : 'Save'}
         onClick={handleSave}
