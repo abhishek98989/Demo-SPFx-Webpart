@@ -113,10 +113,10 @@ export default class MarketingCalendarWebPart extends BaseClientSideWebPart<IMar
               groupName: strings.BasicGroupName,
               groupFields: [
                 PropertyPaneTextField('description', {
-                  label: strings.DescriptionFieldLabel
+                  label: 'Page Title'
                 }),
                  PropertyPaneTextField('MarketingCalendarId', {
-                  label: 'MarketingCalendarId'
+                  label: 'Calendar List Id'
                 })
               ]
             }

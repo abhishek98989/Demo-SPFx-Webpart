@@ -1271,7 +1271,7 @@ export default function ModernCalendar(props: any) {
       <div className={'container'}>
         <div className={'row'}>
           <div className={'column'}>
-            <h2>Marketing Calendar</h2>
+            <h2>{props?.PageName}</h2>
             <div className={'calendarContainer'}>
               <Calendar
                 localizer={localizer}

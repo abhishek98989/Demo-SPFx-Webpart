@@ -12,3 +12,6 @@
 #CommentsWrapper {
     display: none !important;
 }
+.scrollableContent{
+    overflow-y: none !important;
+}

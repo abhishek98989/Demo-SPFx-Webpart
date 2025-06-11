@@ -5,24 +5,22 @@ import {
   Panel,
   PanelType,
   TextField,
-  DatePicker,
   Dropdown,
   IDropdownOption,
   PrimaryButton,
   DefaultButton,
-  MessageBar,
-  
-  MessageBarType,
   Label,
   Stack,
   IconButton,
-  Separator,
-  Text,
-  Modal,
-  Dialog,
-  DialogType,
-  DialogFooter
+  Text
 } from '@fluentui/react';
+import {
+  useToastController,
+  Toaster,
+  ToastTitle,
+  Toast,
+  ToastBody,
+} from '@fluentui/react-components';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { RichText } from '@pnp/spfx-controls-react/lib/RichText';
 import { SPHttpClient } from '@microsoft/sp-http';
@@ -35,6 +33,8 @@ import "@pnp/sp/items";
 import "@pnp/sp/attachments";
 import moment from 'moment';
 import './PostsStyle.css';
+import AttachmentViewer from './AttachmentViewer';
+import { useGlobalLoaderContext } from '../../../globalCommon/customLoader';
 
 export interface IPostItem {
   Id?: number;
@@ -61,6 +61,7 @@ export interface IAddEditFormProps {
 }
 
 const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
+  const { showLoader, hideLoader } = useGlobalLoaderContext();
   const [formData, setFormData] = useState<IPostItem>({
     Title: '',
     PublishingDate: new Date().toISOString().split('T')[0],
@@ -72,22 +73,42 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
   const sp = spfi().using(SPFx(props?.Context));
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [message, setMessage] = useState<{ text: string; type: MessageBarType } | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<any[]>([]);
+  
+  // Toast controller
+  const { dispatchToast } = useToastController();
   
   // File viewer states
   const [isViewerOpen, setIsViewerOpen] = useState<boolean>(false);
   const [currentViewFile, setCurrentViewFile] = useState<{ url: string; name: string; type: string } | null>(null);
-
+  
   const regionOptions: IDropdownOption[] = [
-    { key: 'North America', text: 'North America' },
-    { key: 'Europe', text: 'Europe' },
-    { key: 'Asia Pacific', text: 'Asia Pacific' },
-    { key: 'Latin America', text: 'Latin America' },
-    { key: 'Middle East & Africa', text: 'Middle East & Africa' },
-    { key: 'Global', text: 'Global' }
+    { key: 'Houston', text: 'Houston' },
+    { key: 'Austin', text: 'Austin' },
+    { key: 'Lubbock', text: 'Lubbock' },
+    { key: 'El Paso', text: 'El Paso' },
+    { key: 'DFW', text: 'DFW' },
+    { key: 'College Station', text: 'College Station' },
+    { key: 'RGV', text: 'RGV' },
+    { key: 'San Antonio', text: 'San Antonio' },
+    { key: 'BCS/Stephenville', text: 'BCS/Stephenville' },
+    { key: 'North Texas', text: 'North Texas' },
+    { key: 'Galveston', text: 'Galveston' },
+    { key: 'Louisiana', text: 'Louisiana' },
+    { key: 'Rio Grande Valley', text: 'Rio Grande Valley' }
   ];
+
+  // Toast notification helper
+  const showToast = (title: string, message: string, intent: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    dispatchToast(
+      <Toast>
+        <ToastTitle>{title}</ToastTitle>
+        <ToastBody>{message}</ToastBody>
+      </Toast>,
+      { intent, timeout: 4000 }
+    );
+  };
 
   useEffect(() => {
     if (props.item) {
@@ -136,7 +157,6 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
       Region: ''
     });
     setErrors({});
-    setMessage(null);
     setAttachments([]);
     setExistingAttachments([]);
   };
@@ -155,11 +175,6 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
     if (!formData.Source.trim()) {
       newErrors.Source = 'Source is required';
     }
-
-    if (!formData.Description.trim()) {
-      newErrors.Description = 'Description is required';
-    }
-
     if (!formData.Region) {
       newErrors.Region = 'Region is required';
     }
@@ -199,10 +214,7 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
       });
       
       if (allowedFiles.length !== fileArray.length) {
-        setMessage({
-          text: 'Only image files and PDFs are allowed.',
-          type: MessageBarType.warning
-        });
+        showToast('File Type Warning', 'Only image files and PDFs are allowed.', 'warning');
       }
       
       setAttachments(prev => [...prev, ...allowedFiles]);
@@ -226,16 +238,10 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
         .delete();
       
       setExistingAttachments(prev => prev.filter(att => att.FileName !== fileName));
-      setMessage({
-        text: 'Attachment removed successfully!',
-        type: MessageBarType.success
-      });
+      showToast('Success', 'Attachment removed successfully!', 'success');
     } catch (error) {
       console.error('Error removing attachment:', error);
-      setMessage({
-        text: 'Error removing attachment.',
-        type: MessageBarType.error
-      });
+      showToast('Error', 'Error removing attachment.', 'error');
     }
   };
 
@@ -254,10 +260,7 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
       setIsViewerOpen(true);
     } catch (error) {
       console.error('Error viewing file:', error);
-      setMessage({
-        text: 'Error opening file for viewing.',
-        type: MessageBarType.error
-      });
+      showToast('Error', 'Error opening file for viewing.', 'error');
     }
   };
 
@@ -280,6 +283,7 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
     }
     setCurrentViewFile(null);
   };
+
   const DeleteButton = ({ onDelete }:any) => (
     <IconButton
       iconProps={{ iconName: 'Delete' }}
@@ -289,6 +293,7 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
       styles={{ root: { color: 'red' } }}
     />
   );
+
   const getFileIcon = (fileName: string): string => {
     const extension = fileName.split('.').pop()?.toLowerCase();
     if (extension === 'pdf') {
@@ -301,15 +306,11 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
 
   const handleSave = async (): Promise<void> => {
     if (!validateForm()) {
-      setMessage({
-        text: 'Please fix the validation errors before saving.',
-        type: MessageBarType.error
-      });
+      showToast('Validation Error', 'Please fix the validation errors before saving.', 'error');
       return;
     }
-
+    showLoader()
     setIsLoading(true);
-    setMessage(null);
 
     try {
       let itemId: number;
@@ -318,18 +319,14 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
         // Update existing item
         await updateItem(props.item.Id, formData);
         itemId = props.item.Id;
-        setMessage({
-          text: 'Post updated successfully!',
-          type: MessageBarType.success
-        });
+        hideLoader()
+        showToast('Success', 'Post updated successfully!', 'success');
       } else {
         // Create new item
         const result = await createItem(formData);
         itemId = result.Id;
-        setMessage({
-          text: 'Post created successfully!',
-          type: MessageBarType.success
-        });
+        hideLoader()
+        showToast('Success', 'Post created successfully!', 'success');
       }
 
       // Handle file attachments if any
@@ -340,14 +337,11 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
       setTimeout(() => {
         props.onSave();
         props.onDismiss();
-      }, 1500);
+      }, 500);
 
     } catch (error) {
       console.error('Error saving post:', error);
-      setMessage({
-        text: 'An error occurred while saving the post. Please try again.',
-        type: MessageBarType.error
-      });
+      showToast('Error', 'An error occurred while saving the post. Please try again.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -470,21 +464,23 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
 
   async function deleteItem(id: number): Promise<void> {
     try {
-      // Get item details before deletion for logging
-   if(confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
-    await sp.web.lists
-    .getById(props.listId)
-    .items
-    .getById(id)
-    .recycle();
-    setTimeout(() => {
-        props.onSave();
-        props.onDismiss();
-      }, 1500);
-   }
-      
-      } catch (error) {
+      if(confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
+        await sp.web.lists
+          .getById(props.listId)
+          .items
+          .getById(id)
+          .recycle();
+        
+        showToast('Success', 'Post deleted successfully!', 'success');
+        
+        setTimeout(() => {
+          props.onSave();
+          props.onDismiss();
+        }, 1500);
+      }
+    } catch (error) {
       console.error("Error deleting item:", error);
+      showToast('Error', 'Error deleting post. Please try again.', 'error');
       throw error;
     }
   }
@@ -528,8 +524,10 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
         {renderUserInfo()}
         <Stack horizontal tokens={{ childrenGap: 10 }}>
         
-     {props?.item?.Id &&<DefaultButton
+     {props?.item?.Id &&
+     <DefaultButton
     text="Delete"
+    disabled={isLoading}
     styles={{
       root: {
         backgroundColor: '#e0e0e0', // light grey
@@ -560,47 +558,9 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
 
   );
 
-  const renderFileViewer = (): JSX.Element => {
-    if (!currentViewFile) return <></>;
-
-    return (
-      <Modal
-        isOpen={isViewerOpen}
-        onDismiss={closeViewer}
-        isBlocking={true}
-        containerClassName={styles.fileViewerModal}
-      >
-        <div className={styles.fileViewerContainer}>
-          <div className={styles.fileViewerHeader}>
-            <Text variant="large">{currentViewFile.name}</Text>
-            <IconButton
-              iconProps={{ iconName: 'Cancel' }}
-              onClick={closeViewer}
-              title="Close"
-            />
-          </div>
-          <div className={styles.fileViewerContent}>
-            {currentViewFile.type === 'image' ? (
-              <img
-                src={currentViewFile.url}
-                alt={currentViewFile.name}
-                style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain' }}
-              />
-            ) : (
-              <iframe
-                src={currentViewFile.url}
-                title={currentViewFile.name}
-                style={{ width: '100%', height: '80vh', border: 'none' }}
-              />
-            )}
-          </div>
-        </div>
-      </Modal>
-    );
-  };
-
   return (
     <>
+      <Toaster />
       <Panel
         isOpen={props.isOpen}
         onDismiss={props.onDismiss}
@@ -612,18 +572,6 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
         className={styles.addEditPanel}
       >
         <div className={styles.formContainer}>
-          {message && (
-            <MessageBar
-              messageBarType={message.type}
-              isMultiline={false}
-              onDismiss={() => setMessage(null)}
-              dismissButtonAriaLabel="Close"
-              className={styles.messageBar}
-            >
-              {message.text}
-            </MessageBar>
-          )}
-
           <Stack tokens={{ childrenGap: 20 }}>
             <TextField
               label="Title"
@@ -664,7 +612,7 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
             />
 
             <div className={styles.richTextSection}>
-              <Label required>Description</Label>
+              <Label>Description</Label>
               <RichText
                 value={formData.Description}
                 onChange={handleRichTextChange}
@@ -679,14 +627,14 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
             </div>
 
             <div className={styles.attachmentSection}>
-              <Label>Attachments (Images and PDFs only)</Label>
+              <Label>Attachments (Images only)</Label>
               
               {/* File Input - Always on top */}
               <div className={styles.fileInputSection}>
                 <input
                   type="file"
                   multiple
-                  accept="image/*,.pdf"
+                  accept="image/*"
                   onChange={handleFileChange}
                   className={styles.fileInput}
                 />
@@ -759,9 +707,7 @@ const AddEditForm: React.FC<IAddEditFormProps> = (props) => {
           </Stack>
         </div>
       </Panel>
-
-      {/* File Viewer Modal */}
-      {renderFileViewer()}
+      <AttachmentViewer isOpen={isViewerOpen} currentFile={currentViewFile} onClose={closeViewer}/>
     </>
   );
 };

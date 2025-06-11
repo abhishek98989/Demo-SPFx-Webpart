@@ -1035,3 +1035,211 @@
     }
   }
 }
+.inlineAttachmentImage {
+  text-align: center;
+  margin-top: 16px;
+
+  img {
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+}
+
+// Add this to your PostsArchive.module.scss file
+
+.navigationHint {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #666;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+  user-select: none;
+  
+  // Hide on mobile to save space
+  @media (max-width: 768px) {
+    display: none;
+  }
+  
+  // Fade in/out on hover of the slider container
+  .sliderView:hover & {
+    opacity: 1;
+  }
+  
+  // Optional: Add a subtle animation
+  animation: fadeInHint 0.5s ease-in-out;
+}
+
+@keyframes fadeInHint {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 0.7;
+    transform: translateY(0);
+  }
+}
+.fileViewerModal {
+  .ms-Modal-main {
+    max-width: 90vw !important;
+    max-height: 90vh !important;
+    width: auto !important;
+    height: auto !important;
+  }
+}
+
+.fileViewerContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 70vh;
+}
+
+.fileViewerHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e1e1e1;
+  background-color: #f8f9fa;
+  flex-shrink: 0;
+}
+
+.fileViewerControls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  
+  .ms-Button {
+    min-width: 32px;
+    height: 32px;
+    
+    &:disabled {
+      opacity: 0.5;
+    }
+  }
+}
+
+.fileViewerContent {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  background-color: #f5f5f5;
+  position: relative;
+  min-height: 400px;
+  
+  img {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    
+    &:hover {
+      // Add subtle hover effect for clickable images
+      opacity: 0.95;
+    }
+  }
+  
+  iframe {
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+}
+
+.viewerInstructions {
+  padding: 8px 20px;
+  background-color: #f8f9fa;
+  border-top: 1px solid #e1e1e1;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.inlineAttachmentImage {
+  position: relative;
+  display: inline-block;
+  
+  &:hover {
+    img {
+      opacity: 0.9;
+    }
+    
+    // Show overlay more prominently on hover
+    div {
+      background: rgba(0,0,0,0.8) !important;
+    }
+  }
+  
+  // Overlay positioning
+  div {
+    position: absolute;
+    top: 16px;
+    right: 8px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    pointer-events: none;
+    transition: background 0.2s ease;
+  }
+}
+
+.navigationHint {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #666;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+  user-select: none;
+  
+  // Hide on mobile to save space
+  @media (max-width: 768px) {
+    display: none;
+  }
+  
+  // Fade in/out on hover of the slider container
+  .sliderView:hover & {
+    opacity: 1;
+  }
+  
+  // Optional: Add a subtle animation
+  animation: fadeInHint 0.5s ease-in-out;
+}
+
+@keyframes fadeInHint {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 0.7;
+    transform: translateY(0);
+  }
+}
+
+// Enhanced slider styles for better interaction
+.slideContent {
+  // Ensure smooth transitions
+  transition: transform 0.3s ease;
+  
+  // Prevent text selection during drag
+  user-select: none;
+  
+  // Better cursor feedback
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+// Attachment list improvements
+.attachmentList {
+  .attachmentItem {
+    &:hover {
+      background-color: rgba(0,0,0,0.05);
+      border-radius: 4px;
+    }
+  }
+}

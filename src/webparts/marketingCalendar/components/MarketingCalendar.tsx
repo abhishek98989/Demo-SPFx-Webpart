@@ -18,7 +18,7 @@ export default class MarketingCalendar extends React.Component<IMarketingCalenda
 
     return (
       <GlobalLoaderProvider>
-      <ModernCalendar Context={this.props.Context} MarketingCalendarId={this.props.MarketingCalendarId}/>
+      <ModernCalendar Context={this.props.Context} PageName={this?.props?.description} MarketingCalendarId={this.props.MarketingCalendarId}/>
       </GlobalLoaderProvider>
     );
   }
