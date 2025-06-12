@@ -35,10 +35,13 @@ interface IEventFormProps {
   event: ICalendarEvent | null;
   isNew: boolean;
   Context: any;
+  userPermissions?:any|null;
   MarketingCalendarId: any;
   onSave: (event: ICalendarEvent) => void;
   onDelete: (eventId: string) => void;
   onCancel: () => void;
+  canEditEvent?:any|null;
+canDeleteEvent?:any|null;
 }
 
 const EventForm: React.FC<IEventFormProps> = (props) => {
@@ -137,6 +140,15 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
 
   const handleSave = async () => {
     // Validate dates before saving
+    if (props?.isNew && !props?.userPermissions.canAdd) {
+      console.warn('User does not have permission to add events');
+      return;
+    }
+    
+    if (!props?.isNew && !props?.canEditEvent) {
+      console.warn('User does not have permission to edit this event');
+      return;
+    }
     if (formData.endTime < formData.startTime) {
       setTimeError("End time must be after start time.");
       return;

@@ -1,3 +1,6 @@
+
+
+// Updated ModernCalendar.tsx with permission handling
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { IModernCalendarProps } from './IModernCalendarProps';
@@ -8,12 +11,14 @@ import "@pnp/sp/items";
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import { Panel, PanelType } from '@fluentui/react/lib/Panel';
 import { List } from '@fluentui/react/lib/List';
+import { PermissionKind } from "@pnp/sp/security";
 import { Text } from '@fluentui/react/lib/Text';
 import { format } from 'date-fns';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import EventForm from './EventForm';
 import moment from 'moment';
 import { useGlobalLoaderContext } from '../../../globalCommon/customLoader';
+
 export interface ICalendarEvent {
   id: string;
   title: string;
@@ -34,6 +39,14 @@ export interface ICalendarEvent {
   modifiedBy: any;
 }
 
+// Permission interface
+interface IUserPermissions {
+  canAdd: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  canView: boolean;
+}
+
 let AllGeneratedevents: any = [];
 const localizer = momentLocalizer(moment);
 
@@ -49,12 +62,64 @@ export default function ModernCalendar(props: any) {
   const [showDatePanel, setShowDatePanel] = useState(false);
   const [selectedDateEvents, setSelectedDateEvents] = useState<ICalendarEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  // Permission state
+  const [userPermissions, setUserPermissions] = useState<any>({
+    canAdd: false,
+    canEdit: false,
+    canDelete: false,
+    canView: false
+  });
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+
   useEffect(() => {
     if (props.MarketingCalendarId) {
       showLoader('Loading...');
-      loadEvents();
+      checkUserPermissions();
     }
   }, [props.MarketingCalendarId]);
+
+  // Check user permissions for the list
+  const checkUserPermissions = async (): Promise<void> => {
+    try {
+      // Get current user
+      const currentUser = await sp.web.currentUser();
+      setCurrentUserId(currentUser.Id);
+
+      // Get user's effective permissions on the list
+      const userPerms = await sp.web.lists.getById(props.MarketingCalendarId)
+        .getUserEffectivePermissions(currentUser.LoginName);
+
+      // Check specific permissions
+
+      const permissions = {
+        canView: sp.web.hasPermissions(userPerms, PermissionKind.ViewListItems),
+        canAdd: sp.web.hasPermissions(userPerms, PermissionKind.AddListItems),
+        canEdit: sp.web.hasPermissions(userPerms, PermissionKind.EditListItems),
+        canDelete: sp.web.hasPermissions(userPerms, PermissionKind.DeleteListItems)
+      };
+
+      setUserPermissions(permissions);
+
+      if (permissions.canView) {
+        loadEvents();
+      } else {
+        hideLoader();
+        console.warn('User does not have permission to view this calendar');
+      }
+    } catch (error) {
+      hideLoader();
+      console.error('Error checking user permissions:', error);
+      // Default to view-only if permission check fails
+      setUserPermissions({
+        canAdd: false,
+        canEdit: false,
+        canDelete: false,
+        canView: true
+      });
+      loadEvents();
+    }
+  };
 
   const loadEvents = async (): Promise<void> => {
     if (!props.MarketingCalendarId) {
@@ -64,11 +129,11 @@ export default function ModernCalendar(props: any) {
     }
 
     try {
-      // Using PnP JS to get list items with the correct column names
       const items = await sp.web.lists.getById(props?.MarketingCalendarId)
         .items
-        .select('Id,Title,Location,EventDate,RecurrenceData,fRecurrence,fAllDayEvent,EndDate,Description,ParticipantsPicker/Id,Category,FreeBusy,Overbook,Modified,Created,Author/Title,Editor/Title')
+        .select('Id,Title,Location,EventDate,RecurrenceData,fRecurrence,fAllDayEvent,EndDate,Description,ParticipantsPicker/Id,Category,FreeBusy,Overbook,Modified,Created,Author/Title,Author/Id,Editor/Title')
         .expand('Author,Editor,ParticipantsPicker').top(5000)()
+
       const NonRecurrenceData = items.filter((item) => item?.RecurrenceData == null);
       const Recurrencedatas = items.filter((item) => item?.RecurrenceData != null && item?.RecurrenceData != 'Every 1 day(s)');
 
@@ -87,7 +152,7 @@ export default function ModernCalendar(props: any) {
           checkDoubleBooking: item.Overbook || false,
           modified: new Date(item.Modified),
           created: new Date(item.Created),
-          createdBy: item.Author ? item.Author.Title : '',
+          createdBy: item.Author ? { Title: item.Author.Title, Id: item.Author.Id } : null,
           modifiedBy: item.Editor ? item.Editor.Title : '',
           RecurrenceData: item.RecurrenceData || null,
           fAllDayEvent: item.fAllDayEvent || false,
@@ -95,6 +160,7 @@ export default function ModernCalendar(props: any) {
           FontColor: categoryOptionsFontColor[item?.Category] ? categoryOptionsFontColor[item?.Category] : '#fff',
         };
       });
+
       AllGeneratedevents = [];
       AllGeneratedevents = AllGeneratedevents.concat(calendarEvents);
       for (const event of Recurrencedatas) {
@@ -104,92 +170,23 @@ export default function ModernCalendar(props: any) {
         }
       }
       handleNavigate(currentCalendarDate, currentCalendarView)
-      // setEvents(AllGeneratedevents);
     } catch (error) {
       hideLoader();
       console.error('Error loading events:', error);
     }
   };
-
-  const handleSelectEvent = (event: ICalendarEvent) => {
-    setSelectedEvent(event);
-    setIsNewEvent(false);
-    setShowModal(true);
-  };
-
-  const handleSelectSlot = ({ start, end }: { start: Date; end: Date }) => {
-    const newEvent: ICalendarEvent = {
-      id: '',
-      title: '',
-      locations: '',
-      startTime: start,
-      endTime: end,
-      description: '',
-      attendees: [],
-      category: '',
-      resources: '',
-      freeBusy: 'Busy',
-      checkDoubleBooking: false,
-      modified: new Date(),
-      created: new Date(),
-      createdBy: null,
-      modifiedBy: null,
-      RecurrenceData: ''
-    };
-    setSelectedEvent(newEvent);
-    setIsNewEvent(true);
-    setShowModal(true);
-  };
   /**
- * Parse recurrence data from SharePoint calendar events
- * @param recurrenceData Event recurrence data from SharePoint
- * @returns Array of recurring event instances
- */
-  const categoryOptionsColor: any = {
-    'Meeting': '#3174ad',
-    'RFQ': ' #ffff00',
-    'RFP': '#107c10',
-    'CSP/Traditional': '#da3b01',
-    'DB': ' #c239b3',
-    'Interview': '#adadad'
-  }
-  const categoryOptionsFontColor: any = {
-    'Meeting': '#fff',
-    'RFQ': ' #000000',
-    'RFP': '#fff',
-    'CSP/Traditional': '#fff',
-    'DB': ' #fff',
-    'Interview': '#000000'
-  }
-  function eventDataForBinding(eventDetails: any, currentDate: Date) {
-    return {
-      ...eventDetails,
-      id: eventDetails.Id,
-      EndDate: new Date(currentDate).toISOString(),
-      EventDate: new Date(currentDate).toISOString(),
-      title: eventDetails.Title,
-      start: new Date(currentDate),
-      end: new Date(currentDate),
-      startTime: new Date(currentDate),
-      endTime: new Date(currentDate),
-      RecurrenceData: eventDetails.RecurrenceData,
-      Color: categoryOptionsColor[eventDetails?.Category] ? categoryOptionsColor[eventDetails?.Category] : '#3174ad',
-      FontColor: categoryOptionsFontColor[eventDetails?.Category] ? categoryOptionsFontColor[eventDetails?.Category] : '#fff',
-    };
-  }
-
-  /**
-   * Calculate the next date in a recurrence pattern
-   * @param rule Recurrence rule
-   * @param firstDayOfWeek First day of week setting
-   * @param currentDate Current date being processed
-   * @param dates Array of dates already processed
-   * @param endDate End date for recurrence
-   * @param allEvents Array of event objects
-   * @param eventDetails Original event details
-   * @param eventStartDate Original event start date to prevent events before this date
-   * @returns String 'break' if processing should stop, or empty string
-   */
+    * Calculate the next date in a recurrence pattern
+    * @param rule Recurrence rule
+    * @param firstDayOfWeek First day of week setting
+    * @param currentDate Current date being processed
+    * @param dates Array of dates already processed
+    * @param endDate End date for recurrence
+    * @param allEvents Array of event objects
+    * @param eventDetails Original event details
+    * @param eventStartDate Original event start date to prevent events before this date
+    * @returns String 'break' if processing should stop, or empty string
+    */
   function parseRecurrence(recurrenceData: any) {
     const dates: Date[] = [];
     const allEvents: any[] = [];
@@ -1060,7 +1057,116 @@ export default function ModernCalendar(props: any) {
 
   }
 
+  // Check if user can edit a specific event
+  const canEditEvent = (event: ICalendarEvent): boolean => {
+    if (!userPermissions.canEdit) return false;
+
+    // User can edit if they have edit permissions and either:
+    // 1. They are the creator of the event, OR
+    // 2. They have full edit permissions (admin/owner)
+    return userPermissions.canEdit && (
+      !event.createdBy ||
+      event.createdBy.Id === currentUserId ||
+      userPermissions.canDelete // Assuming delete permission means full access
+    );
+  };
+
+  // Check if user can delete a specific event
+  const canDeleteEvent = (event: ICalendarEvent): boolean => {
+    if (!userPermissions.canDelete) return false;
+
+    // User can delete if they have delete permissions and either:
+    // 1. They are the creator of the event, OR
+    // 2. They have full delete permissions (admin/owner)
+    return userPermissions.canDelete && (
+      !event.createdBy ||
+      event.createdBy.Id === currentUserId ||
+      userPermissions.canDelete // Full delete access
+    );
+  };
+
+  const handleSelectEvent = (event: ICalendarEvent) => {
+    // Only allow viewing/editing if user has permissions
+    if (!userPermissions.canView) return;
+
+    setSelectedEvent(event);
+    setIsNewEvent(false);
+    setShowModal(true);
+  };
+
+  const handleSelectSlot = ({ start, end }: { start: Date; end: Date }) => {
+    // Only allow creating new events if user has add permission
+    if (!userPermissions.canAdd) return;
+
+    const newEvent: ICalendarEvent = {
+      id: '',
+      title: '',
+      locations: '',
+      startTime: start,
+      endTime: end,
+      description: '',
+      attendees: [],
+      category: '',
+      resources: '',
+      freeBusy: 'Busy',
+      checkDoubleBooking: false,
+      modified: new Date(),
+      created: new Date(),
+      createdBy: null,
+      modifiedBy: null,
+      RecurrenceData: ''
+    };
+    setSelectedEvent(newEvent);
+    setIsNewEvent(true);
+    setShowModal(true);
+  };
+
+  const categoryOptionsColor: any = {
+    'Meeting': '#3174ad',
+    'RFQ': ' #ffff00',
+    'RFP': '#107c10',
+    'CSP/Traditional': '#da3b01',
+    'DB': ' #c239b3',
+    'Interview': '#adadad'
+  }
+
+  const categoryOptionsFontColor: any = {
+    'Meeting': '#fff',
+    'RFQ': ' #000000',
+    'RFP': '#fff',
+    'CSP/Traditional': '#fff',
+    'DB': ' #fff',
+    'Interview': '#000000'
+  }
+
+  function eventDataForBinding(eventDetails: any, currentDate: Date) {
+    return {
+      ...eventDetails,
+      id: eventDetails.Id,
+      EndDate: new Date(currentDate).toISOString(),
+      EventDate: new Date(currentDate).toISOString(),
+      title: eventDetails.Title,
+      start: new Date(currentDate),
+      end: new Date(currentDate),
+      startTime: new Date(currentDate),
+      endTime: new Date(currentDate),
+      RecurrenceData: eventDetails.RecurrenceData,
+      Color: categoryOptionsColor[eventDetails?.Category] ? categoryOptionsColor[eventDetails?.Category] : '#3174ad',
+      FontColor: categoryOptionsFontColor[eventDetails?.Category] ? categoryOptionsFontColor[eventDetails?.Category] : '#fff',
+    };
+  }
+
   const saveEvent = (event: ICalendarEvent) => {
+    if (isNewEvent && !userPermissions.canAdd) {
+      console.warn('User does not have permission to add events');
+      return;
+    }
+
+    if (!isNewEvent && !canEditEvent(event)) {
+      console.warn('User does not have permission to edit this event');
+      return;
+    }
+
     if (isNewEvent) {
       createEvent(event);
     } else {
@@ -1070,17 +1176,30 @@ export default function ModernCalendar(props: any) {
   };
 
   const createEvent = async (event: ICalendarEvent) => {
+    if (!userPermissions.canAdd) {
+      console.warn('User does not have permission to add events');
+      return;
+    }
     showLoader('Loading...');
     loadEvents();
   };
 
   const updateEvent = async (event: ICalendarEvent) => {
+    if (!canEditEvent(event)) {
+      console.warn('User does not have permission to edit this event');
+      return;
+    }
     showLoader('Loading...');
     loadEvents();
   };
 
-
   const deleteEvent = async (eventId: string) => {
+    const event = events.find(e => e.id === eventId);
+    if (!event || !canDeleteEvent(event)) {
+      console.warn('User does not have permission to delete this event');
+      return;
+    }
+
     try {
       await sp.web.lists.getById(props.MarketingCalendarId).items.getById(parseInt(eventId)).recycle();
       loadEvents();
@@ -1089,33 +1208,27 @@ export default function ModernCalendar(props: any) {
       console.error('Error deleting event:', error);
     }
   };
+
   function getYearMonthFromDate(date: any) {
     const eventDate = new Date(date);
-    const eventMonth = eventDate.getMonth() + 1; // Get month of the event
-    const eventYear = eventDate.getFullYear(); // Get year of the event
+    const eventMonth = eventDate.getMonth() + 1;
+    const eventYear = eventDate.getFullYear();
     return { year: eventYear, month: eventMonth };
   }
+
   const handleNavigate = (newDate: any, newView: any) => {
     setCurrentCalendarDate(newDate);
     setCurrentCalendarView(newView);
 
-    // For month view, we want to show events from the current month and adjacent months
-    // that might appear on the calendar
     if (newView === 'month') {
-      // Start of the displayed calendar period (might include days from previous month)
       const start = new Date(newDate.getFullYear(), newDate.getMonth(), 1);
-      start.setDate(1 - (start.getDay() === 0 ? 7 : start.getDay())); // Go back to the first day shown on calendar
+      start.setDate(1 - (start.getDay() === 0 ? 7 : start.getDay()));
 
-      // End of the displayed calendar period (might include days from next month)
       const end = new Date(newDate.getFullYear(), newDate.getMonth() + 1, 0);
       const daysToAdd = 7 - end.getDay();
-      end.setDate(end.getDate() + (daysToAdd === 7 ? 0 : daysToAdd)); // Go forward to the last day shown on calendar
+      end.setDate(end.getDate() + (daysToAdd === 7 ? 0 : daysToAdd));
 
-      // Filter events that fall within the displayed period
       const filteredEvents = AllGeneratedevents.filter((event: ICalendarEvent) => {
-        // An event is visible if:
-        // 1. It starts before the end of the displayed period AND
-        // 2. It ends after the start of the displayed period
         return event.startTime <= end && event.endTime >= start;
       });
       hideLoader();
@@ -1126,24 +1239,13 @@ export default function ModernCalendar(props: any) {
     }
   };
 
-
-  // Custom event component renderer
-  // const customEventPropGetter = (event: ICalendarEvent) => {
-  //   return {
-  //     className: event.category ? `event-${event.category.toLowerCase()}` : '',
-  //   };
-  // };
-
-  // Handle showing the panel with all events for a date
   const handleShowMoreEvents = (events: ICalendarEvent[], date: Date) => {
     setSelectedDateEvents(events);
     setSelectedDate(date);
     setShowDatePanel(true);
   };
 
-  // Custom date cell component for month view
   const CustomDateCell = ({ date, events }: { date: Date, events: ICalendarEvent[] }) => {
-    // Check if there are more than 3 events for this date
     const hasMoreEvents = events.length > 3;
     const displayEvents = hasMoreEvents ? events.slice(0, 2) : events;
     const moreEventsCount = hasMoreEvents ? events.length - 2 : 0;
@@ -1156,8 +1258,11 @@ export default function ModernCalendar(props: any) {
             className="rbc-event-preview"
             onClick={(e) => {
               e.stopPropagation();
-              handleSelectEvent(event);
+              if (userPermissions.canView) {
+                handleSelectEvent(event);
+              }
             }}
+            style={{ cursor: userPermissions.canView ? 'pointer' : 'default' }}
           >
             <div className="event-title">
               {event.fAllDayEvent ? (
@@ -1179,8 +1284,11 @@ export default function ModernCalendar(props: any) {
             className="rbc-show-more"
             onClick={(e) => {
               e.stopPropagation();
-              handleShowMoreEvents(events, date);
+              if (userPermissions.canView) {
+                handleShowMoreEvents(events, date);
+              }
             }}
+            style={{ cursor: userPermissions.canView ? 'pointer' : 'default' }}
           >
             +{moreEventsCount} more
           </div>
@@ -1189,15 +1297,17 @@ export default function ModernCalendar(props: any) {
     );
   };
 
-  // Render the events in the panel
   const renderPanelEvent = (item: ICalendarEvent) => {
     return (
       <div
         className="panel-event"
         onClick={() => {
-          setShowDatePanel(false);
-          handleSelectEvent(item);
+          if (userPermissions.canView) {
+            setShowDatePanel(false);
+            handleSelectEvent(item);
+          }
         }}
+        style={{ cursor: userPermissions.canView ? 'pointer' : 'default' }}
       >
         {item.fAllDayEvent ? (
           <span className="event-title">{item.title} (All day)</span>
@@ -1214,7 +1324,6 @@ export default function ModernCalendar(props: any) {
     );
   };
 
-  // Get all events for a specific day in month view
   const getEventsForDate = (date: Date) => {
     const day = date?.getDate();
     const month = date?.getMonth();
@@ -1223,14 +1332,11 @@ export default function ModernCalendar(props: any) {
     return events?.filter(event => {
       const eventStart = new Date(event?.startTime);
       const eventEnd = new Date(event?.endTime);
-
-      // Check if the event occurs on this date
       const eventDate = new Date(year, month, day);
       return eventStart <= eventDate && eventEnd >= eventDate;
     });
   };
 
-  // Custom components for the Calendar
   const components = {
     month: {
       event: (eventProps: any) => {
@@ -1240,8 +1346,11 @@ export default function ModernCalendar(props: any) {
             className="rbc-event-preview"
             onClick={(e) => {
               e.stopPropagation();
-              handleSelectEvent(event);
+              if (userPermissions.canView) {
+                handleSelectEvent(event);
+              }
             }}
+            style={{ cursor: userPermissions.canView ? 'pointer' : 'default' }}
           >
             <div className="event-title">
               <span>{event.title}</span>
@@ -1252,9 +1361,10 @@ export default function ModernCalendar(props: any) {
     },
     eventWrapper: ({ children }: any) => <>{children}</>,
   };
-  const eventStyleGetter = (event: any, start: any, end: any, isSelecte: any) => {
+
+  const eventStyleGetter = (event: any, start: any, end: any, isSelected: any) => {
     const style = {
-      backgroundColor: event.Color, // Set the background color based on the color property in the event data
+      backgroundColor: event.Color,
       borderRadius: "0px",
       opacity: 0.8,
       color: event.FontColor,
@@ -1265,6 +1375,24 @@ export default function ModernCalendar(props: any) {
       style,
     };
   };
+
+  // Don't render calendar if user doesn't have view permission
+  if (!userPermissions.canView) {
+    return (
+      <div className={'modernCalendar'}>
+        <div className={'container'}>
+          <div className={'row'}>
+            <div className={'column'}>
+              <h2>{props?.PageName}</h2>
+              <div style={{ padding: '20px', textAlign: 'center' }}>
+                <p>You don't have permission to view this calendar.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={'modernCalendar'}>
@@ -1285,9 +1413,9 @@ export default function ModernCalendar(props: any) {
                 endAccessor="endTime"
                 titleAccessor="title"
                 style={{ height: 600 }}
-                selectable
+                selectable={userPermissions.canAdd} // Only allow selection if user can add
                 onSelectEvent={handleSelectEvent}
-                onSelectSlot={handleSelectSlot}
+                onSelectSlot={userPermissions.canAdd ? handleSelectSlot : undefined} // Only allow slot selection if user can add
                 onNavigate={handleNavigate}
                 views={['month', 'week', 'day', 'agenda']}
                 components={components}
@@ -1305,6 +1433,10 @@ export default function ModernCalendar(props: any) {
           Context={props?.Context}
           MarketingCalendarId={props?.MarketingCalendarId}
           onCancel={() => setShowModal(false)}
+          // Pass permission props to EventForm
+          userPermissions={userPermissions}
+          canEditEvent={selectedEvent ? canEditEvent(selectedEvent) : false}
+          canDeleteEvent={selectedEvent ? canDeleteEvent(selectedEvent) : false}
         />
       )}
       <Panel
