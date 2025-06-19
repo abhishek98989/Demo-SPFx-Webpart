@@ -665,14 +665,14 @@ hideLoader()
                     Source: {currentItem?.Source}
                   </span>
                 </div>
-                <PrimaryButton
+                {/* <PrimaryButton
                   text="View Details"
                   onClick={(e) => {
                     e.stopPropagation(); // Prevent slider drag
                     openItemModal(currentItem);
                   }}
                   className={styles.viewDetailsButton}
-                />
+                /> */}
               </div>
             </div>
           </div>

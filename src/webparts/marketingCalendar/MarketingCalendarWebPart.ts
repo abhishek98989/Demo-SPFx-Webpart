@@ -3,6 +3,7 @@ import * as ReactDom from 'react-dom';
 import { Version } from '@microsoft/sp-core-library';
 import {
   type IPropertyPaneConfiguration,
+  PropertyPaneDropdown,
   PropertyPaneTextField
 } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
@@ -112,10 +113,17 @@ export default class MarketingCalendarWebPart extends BaseClientSideWebPart<IMar
             {
               groupName: strings.BasicGroupName,
               groupFields: [
-                PropertyPaneTextField('description', {
-                  label: 'Page Title'
+               
+               
+                PropertyPaneDropdown('description', {
+                  label: 'Calendar',
+                  options: [
+                    { key: 'Marketing Calendar', text: 'Marketing Calendar' },
+                    { key: 'Marketing Calendar-Internal', text: 'Marketing Calendar-Internal' }
+                  ],
+                  selectedKey: this.properties.description || 'table'
                 }),
-                 PropertyPaneTextField('MarketingCalendarId', {
+                PropertyPaneTextField('MarketingCalendarId', {
                   label: 'Calendar List Id'
                 })
               ]

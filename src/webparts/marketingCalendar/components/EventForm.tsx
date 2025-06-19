@@ -35,6 +35,7 @@ interface IEventFormProps {
   event: ICalendarEvent | null;
   isNew: boolean;
   Context: any;
+  CalendarTitle?:any|null;
   userPermissions?:any|null;
   MarketingCalendarId: any;
   onSave: (event: ICalendarEvent) => void;
@@ -43,7 +44,14 @@ interface IEventFormProps {
   canEditEvent?:any|null;
 canDeleteEvent?:any|null;
 }
-
+// let categoryOptions: IDropdownOption[] = [
+//   { key: 'Meeting', text: 'Meeting' },
+//   { key: 'RFQ', text: 'RFQ' },
+//   { key: 'RFP', text: 'RFP' },
+//   { key: 'CSP/Traditional', text: 'CSP/Traditional' },
+//   { key: 'DB', text: 'DB' },
+//   { key: 'Interview', text: 'Interview' }
+// ];
 const EventForm: React.FC<IEventFormProps> = (props) => {
   const sp = spfi().using(SPFx(props?.Context));
   const [isAllDay, setIsAllDay] = useState(false);
@@ -69,6 +77,14 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
   const [showRecurrenceSeriesInfo, setShowRecurrenceSeriesInfo] = React.useState(false);
   const [showRecurrence, setshowRecurrence] = React.useState(true);
   const [IsDisableField, setIsDisableField] = React.useState(false);
+  const [categoryOptions, setCategoryOptions] = React.useState([
+    { key: 'Meeting', text: 'Meeting' },
+    { key: 'RFQ', text: 'RFQ' },
+    { key: 'RFP', text: 'RFP' },
+    { key: 'CSP/Traditional', text: 'CSP/Traditional' },
+    { key: 'DB', text: 'DB' },
+    { key: 'Interview', text: 'Interview' }
+  ]);
   const [newRecurrenceEvent, setNewRecurrenceEvent] = React.useState(false);
   const [editRecurrenceEvent, setEditRecurrenceEvent] = React.useState(false);
   const [returnedRecurrenceInfo, setReturnedRecurrenceInfo] =
@@ -91,6 +107,16 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
         setNewRecurrenceEvent(false);  // Not a new recurrence, editing existing
         setEditRecurrenceEvent(true);  // Flag as editing recurrence
       }
+    }
+    if(props?.CalendarTitle=='Marketing Calendar-Internal'){
+      setCategoryOptions([
+        { key: 'PTO', text: 'PTO' },
+        { key: 'Remote', text: 'Remote' },
+        { key: 'Appointment', text: 'Appointment' },
+        { key: 'Site Visit', text: 'Site Visit' },
+        { key: 'Interview Prep', text: 'Interview Prep' },
+        { key: 'Other', text: 'Other' }
+      ]);
     }
   }, [props.event]);
 
@@ -216,22 +242,6 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       props.onDelete(formData.id);
     }
   };
-
-  const categoryOptions: IDropdownOption[] = [
-    { key: 'Meeting', text: 'Meeting' },
-    { key: 'RFQ', text: 'RFQ' },
-    { key: 'RFP', text: 'RFP' },
-    { key: 'CSP/Traditional', text: 'CSP/Traditional' },
-    { key: 'DB', text: 'DB' },
-    { key: 'Interview', text: 'Interview' }
-  ];
-
-  const freeBusyOptions: IDropdownOption[] = [
-    { key: 'Free', text: 'Free' },
-    { key: 'Tentative', text: 'Tentative' },
-    { key: 'Busy', text: 'Busy' },
-    { key: 'Out of Office', text: 'Out of Office' }
-  ];
 
   // Function to disable past dates or dates before start date
   const onRenderStartDatePickerDay = (date: Date): JSX.Element => {

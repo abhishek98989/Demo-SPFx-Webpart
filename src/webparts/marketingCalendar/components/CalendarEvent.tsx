@@ -115,7 +115,7 @@ export default function ModernCalendar(props: any) {
         canAdd: false,
         canEdit: false,
         canDelete: false,
-        canView: true
+        canView: false
       });
       loadEvents();
     }
@@ -1383,7 +1383,7 @@ export default function ModernCalendar(props: any) {
         <div className={'container'}>
           <div className={'row'}>
             <div className={'column'}>
-              <h2>{props?.PageName}</h2>
+              <h2>{props?.CalendarTitle}</h2>
               <div style={{ padding: '20px', textAlign: 'center' }}>
                 <p>You don't have permission to view this calendar.</p>
               </div>
@@ -1399,7 +1399,7 @@ export default function ModernCalendar(props: any) {
       <div className={'container'}>
         <div className={'row'}>
           <div className={'column'}>
-            <h2>{props?.PageName}</h2>
+            <h2>{props?.CalendarTitle}</h2>
             <div className={'calendarContainer'}>
               <Calendar
                 localizer={localizer}
@@ -1431,6 +1431,7 @@ export default function ModernCalendar(props: any) {
           onSave={saveEvent}
           onDelete={deleteEvent}
           Context={props?.Context}
+          CalendarTitle={props?.CalendarTitle}
           MarketingCalendarId={props?.MarketingCalendarId}
           onCancel={() => setShowModal(false)}
           // Pass permission props to EventForm
