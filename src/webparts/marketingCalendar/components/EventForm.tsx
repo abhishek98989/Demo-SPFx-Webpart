@@ -11,13 +11,15 @@ import {
   Label,
   MessageBar,
   MessageBarType,
-  DayOfWeek
+  DayOfWeek,
+  Text
 } from '@fluentui/react';
 import { TextField } from '@fluentui/react/lib/TextField';
 import { DatePicker } from '@fluentui/react/lib/DatePicker';
 import { TimePicker } from '@fluentui/react/lib/TimePicker';
 import { Dropdown, IDropdownOption } from '@fluentui/react/lib/Dropdown';
 import { Toggle } from '@fluentui/react/lib/Toggle';
+import { RichText } from '@pnp/spfx-controls-react/lib/RichText';
 import { ICalendarEvent } from './CalendarEvent';
 import { EventRecurrenceInfo } from '../../../globalCommon/EventRecurrenceControls/EventRecurrenceInfo/EventRecurrenceInfo';
 import { spfi, SPFx } from '@pnp/sp';
@@ -44,14 +46,7 @@ interface IEventFormProps {
   canEditEvent?:any|null;
 canDeleteEvent?:any|null;
 }
-// let categoryOptions: IDropdownOption[] = [
-//   { key: 'Meeting', text: 'Meeting' },
-//   { key: 'RFQ', text: 'RFQ' },
-//   { key: 'RFP', text: 'RFP' },
-//   { key: 'CSP/Traditional', text: 'CSP/Traditional' },
-//   { key: 'DB', text: 'DB' },
-//   { key: 'Interview', text: 'Interview' }
-// ];
+
 const EventForm: React.FC<IEventFormProps> = (props) => {
   const sp = spfi().using(SPFx(props?.Context));
   const [isAllDay, setIsAllDay] = useState(false);
@@ -93,6 +88,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
   const [isEditingRecurrence, setIsEditingRecurrence] = useState<boolean>(false);
   const [tempRecurrenceData, setTempRecurrenceData] = useState<any | undefined>();
   const [timeError, setTimeError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
     if (props.event) {
@@ -144,6 +140,19 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       ...prevData,
       [field]: value
     }));
+    
+    // Clear error for this field when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+    }
+  };
+
+  const handleRichTextChange = (text: string): string => {
+    handleInputChange('description', text);
+    return text;
   };
 
   const getUtcTime = async (date: string | Date): Promise<string> => {
@@ -358,6 +367,36 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
     return getRecurrenceType(recurrenceData); // Same as type for this use case
   };
 
+  const renderDescriptionField = () => {
+    if (props?.CalendarTitle === 'Training Calendar') {
+      return (
+        <div>
+          <Label>Description</Label>
+          <RichText
+            value={formData.description}
+            onChange={handleRichTextChange}
+            isEditMode={true}
+          />
+          {errors.description && (
+            <Text variant="small" style={{ color: '#d13438' }}>
+              {errors.description}
+            </Text>
+          )}
+        </div>
+      );
+    } else {
+      return (
+        <TextField
+          label="Description"
+          multiline
+          rows={3}
+          value={formData.description}
+          onChange={(_, value) => handleInputChange('description', value)}
+        />
+      );
+    }
+  };
+
   const renderFooterContent = () => (
     <Stack horizontal tokens={{ childrenGap: 8 }} horizontalAlign="end">
       <PrimaryButton onClick={handleSave} text="Save" />
@@ -482,13 +521,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
           }}
         />
 
-        <TextField
-          label="Description"
-          multiline
-          rows={3}
-          value={formData.description}
-          onChange={(_, value) => handleInputChange('description', value)}
-        />
+        {renderDescriptionField()}
 
         <Dropdown
           label="Category"
