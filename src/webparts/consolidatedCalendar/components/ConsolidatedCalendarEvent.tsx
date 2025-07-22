@@ -15,7 +15,7 @@ import { PermissionKind } from "@pnp/sp/security";
 import { Text } from '@fluentui/react/lib/Text';
 import { format } from 'date-fns';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import EventForm from './EventForm';
+import EventForm from './ConsolidatedEventForm';
 import moment from 'moment';
 import { useGlobalLoaderContext } from '../../../globalCommon/customLoader';
 
@@ -50,7 +50,7 @@ interface IUserPermissions {
 let AllGeneratedevents: any = [];
 const localizer = momentLocalizer(moment);
 
-export default function ModernCalendar(props: any) {
+export default function ConsolidatedCalendarEvent(props: any) {
   const { showLoader, hideLoader } = useGlobalLoaderContext();
   const [events, setEvents] = useState<ICalendarEvent[]>([]);
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -64,81 +64,139 @@ export default function ModernCalendar(props: any) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   // Permission state
-  const [userPermissions, setUserPermissions] = useState<any>({
-    canAdd: false,
-    canEdit: false,
-    canDelete: false,
-    canView: false
-  });
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (props.MarketingCalendarId) {
+ loadEvents()
       showLoader('Loading...');
-      checkUserPermissions();
-    }
+
   }, [props.MarketingCalendarId]);
 
-  // Check user permissions for the list
-  const checkUserPermissions = async (): Promise<void> => {
+  const copyEventsToAnotherListSafe = async (sourceListId: string, targetListId: string): Promise<{ success: boolean; copiedCount: number; errorCount: number }> => {
+    if (!sourceListId || !targetListId) {
+      throw new Error('Source or target list ID not provided');
+    }
+  
+    let copiedCount = 0;
+    let errorCount = 0;
+    const spSource = spfi('https://vaughnconstruction.sharepoint.com').using(SPFx(props?.Context));
+    const spTarget = spfi('https://vaughnconstruction.sharepoint.com/sites/intranet').using(SPFx(props?.Context));
     try {
-      // Get current user
-      const currentUser = await sp.web.currentUser();
-      setCurrentUserId(currentUser.Id);
-
-      // Get user's effective permissions on the list
-      const userPerms = await sp.web.lists.getById(props.MarketingCalendarId)
-        .getUserEffectivePermissions(currentUser.LoginName);
-
-      // Check specific permissions
-
-      const permissions = {
-        canView: sp.web.hasPermissions(userPerms, PermissionKind.ViewListItems),
-        canAdd: sp.web.hasPermissions(userPerms, PermissionKind.AddListItems),
-        canEdit: sp.web.hasPermissions(userPerms, PermissionKind.EditListItems),
-        canDelete: sp.web.hasPermissions(userPerms, PermissionKind.DeleteListItems)
-      };
-
-      setUserPermissions(permissions);
-
-      if (permissions.canView) {
-        loadEvents();
-      } else {
-        hideLoader();
-        console.warn('User does not have permission to view this calendar');
+      // First, validate that both lists exist
+      try {
+        await  spSource.web.lists.getById(sourceListId).select('Id,Title')();
+        await spTarget.web.lists.getById(targetListId).select('Id,Title')();
+      } catch (listError) {
+        throw new Error('One or both lists do not exist or are not accessible');
       }
+  
+      // GET: Fetch all items from source list
+      const sourceItems = await spSource.web.lists.getById(sourceListId)
+        .items
+        .select('Id,Title,Location,EventDate,RecurrenceData,fRecurrence,fAllDayEvent,EndDate,Description,Category,FreeBusy,Overbook')
+        .top(5000)();
+  
+      console.log(`Fetched ${sourceItems.length} items from source list`);
+  
+      // Process items individually for better error tracking
+      for (const item of sourceItems) {
+        try {
+          const transformedItem: any = {
+            Title: item.Title || 'Untitled Event',
+            Location: item.Location || '',
+            Description: item.Description || '',
+            Category: item.Category || '',
+            FreeBusy: item.FreeBusy || 'Busy',
+            fAllDayEvent: Boolean(item.fAllDayEvent),
+            fRecurrence: Boolean(item.fRecurrence)
+          };
+  
+          // Handle dates with validation
+          if (item.EventDate) {
+            transformedItem.EventDate = new Date(item.EventDate).toISOString();
+          }
+          if (item.EndDate) {
+            transformedItem.EndDate = new Date(item.EndDate).toISOString();
+          }
+  
+          // Handle RecurrenceData carefully
+          if (item.fRecurrence && item.RecurrenceData) {
+            transformedItem.RecurrenceData = item.RecurrenceData;
+          }
+  
+          // await spTarget.web.lists.getById(targetListId).items.add(transformedItem);
+          copiedCount++;
+          console.log(item);
+          // Log progress every 10 items
+          if (copiedCount % 10 === 0) {
+            console.log(`Copied ${copiedCount}/${sourceItems.length} items`);
+          }
+  
+          // Small delay to avoid throttling
+          await new Promise(resolve => setTimeout(resolve, 50));
+  
+        } catch (itemError) {
+          errorCount++;
+          console.error(`Error copying item "${item.Title || item.Id}":`, itemError);
+        }
+      }
+  
+      console.log(`Copying completed. Success: ${copiedCount}, Errors: ${errorCount}`);
+      return { success: true, copiedCount, errorCount };
+  
     } catch (error) {
-      hideLoader();
-      console.error('Error checking user permissions:', error);
-      // Default to view-only if permission check fails
-      setUserPermissions({
-        canAdd: false,
-        canEdit: false,
-        canDelete: false,
-        canView: false
-      });
-      loadEvents();
+      console.error('Error in copy operation:', error);
+      return { success: false, copiedCount, errorCount };
     }
   };
 
   const loadEvents = async (): Promise<void> => {
-    if (!props.MarketingCalendarId) {
-      console.error('List name not provided');
+    const calendarConfigs = props.CalendarDetails; // Array of { siteUrl, CalendarID }
+
+    if (!calendarConfigs || calendarConfigs.length === 0) {
+      console.error('No calendar configurations provided');
       hideLoader();
       return;
     }
 
-    try {
-      const items = await sp.web.lists.getById(props?.MarketingCalendarId)
-        .items
-        .select('Id,Title,Location,EventDate,RecurrenceData,fRecurrence,fAllDayEvent,EndDate,Description,ParticipantsPicker/Id,Category,FreeBusy,Overbook,Modified,Created,Author/Title,Author/Id,Editor/Title')
-        .expand('Author,Editor,ParticipantsPicker').top(5000)()
+    AllGeneratedevents = [];
 
-      const NonRecurrenceData = items.filter((item) => item?.RecurrenceData == null);
-      const Recurrencedatas = items.filter((item) => item?.RecurrenceData != null && item?.RecurrenceData != 'Every 1 day(s)');
+    for (const config of calendarConfigs) {
+      const { siteUrl, CalendarID } = config;
 
-      const calendarEvents: ICalendarEvent[] = NonRecurrenceData.map((item: any) => {
-        return {
+      // Validate URL
+      try {
+        new URL(siteUrl);
+      } catch {
+        console.warn(`Invalid site URL skipped: ${siteUrl}`);
+        continue;
+      }
+
+      // Validate GUID
+      const guidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      if (!guidRegex.test(CalendarID)) {
+        console.warn(`Invalid calendar ID skipped: ${CalendarID}`);
+        continue;
+      }
+
+      try {
+        const spSite = spfi(siteUrl).using(SPFx(props?.Context));
+
+        const items = await spSite.web.lists.getById(CalendarID)
+          .items
+          .select('Id,Title,Location,EventDate,RecurrenceData,fRecurrence,fAllDayEvent,EndDate,Description,ParticipantsPicker/Id,Category,FreeBusy,Overbook,Modified,Created,Author/Title,Author/Id,Editor/Title')
+          .expand('Author,Editor,ParticipantsPicker')
+          .top(5000)();
+
+        const NonRecurrenceData = items.filter(item => !item.RecurrenceData);
+        const Recurrencedatas = items.filter(item => item.RecurrenceData && item.RecurrenceData !== 'Every 1 day(s)');
+        const siteName = getSiteNameFromUrl(siteUrl); // normalized and lowercase
+        const siteColors = siteColorMap[siteName] || {
+          Color: '#3174ad',     // default fallback
+          FontColor: '#fff'
+        };
+
+        const calendarEvents: ICalendarEvent[] = NonRecurrenceData.map((item: any) => ({
           id: item.Id.toString(),
           title: item.Title || '',
           locations: item.Location || '',
@@ -156,25 +214,34 @@ export default function ModernCalendar(props: any) {
           modifiedBy: item.Editor ? item.Editor.Title : '',
           RecurrenceData: item.RecurrenceData || null,
           fAllDayEvent: item.fAllDayEvent || false,
-          Color: categoryOptionsColor[item?.Category] ? categoryOptionsColor[item?.Category] : '#3174ad',
-          FontColor: categoryOptionsFontColor[item?.Category] ? categoryOptionsFontColor[item?.Category] : '#fff',
-        };
-      });
+          Color: siteColors.Color,
+          FontColor: siteColors.FontColor,
+          siteUrl,
+          calendarID: CalendarID
+        }));
 
-      AllGeneratedevents = [];
-      AllGeneratedevents = AllGeneratedevents.concat(calendarEvents);
-      for (const event of Recurrencedatas) {
-        let allDates = parseRecurrence(event)
-        if (allDates.length > 0) {
-          AllGeneratedevents = AllGeneratedevents.concat(allDates)
+        AllGeneratedevents = AllGeneratedevents.concat(calendarEvents);
+
+        for (let event of Recurrencedatas) {
+          event={
+            ...event,
+            siteUrl,
+          calendarID: CalendarID
+          }
+          const recurringInstances = parseRecurrence(event);
+          if (recurringInstances.length > 0) {
+            AllGeneratedevents = AllGeneratedevents.concat(recurringInstances);
+          }
         }
+      } catch (error) {
+        console.error(`Failed to load events from site: ${siteUrl}, list: ${CalendarID}`, error);
       }
-      handleNavigate(currentCalendarDate, currentCalendarView)
-    } catch (error) {
-      hideLoader();
-      console.error('Error loading events:', error);
     }
+
+    hideLoader();
+    handleNavigate(currentCalendarDate, currentCalendarView);
   };
+
   /**
     * Calculate the next date in a recurrence pattern
     * @param rule Recurrence rule
@@ -1058,37 +1125,11 @@ export default function ModernCalendar(props: any) {
   }
 
   // Check if user can edit a specific event
-  const canEditEvent = (event: ICalendarEvent): boolean => {
-    if (!userPermissions.canEdit) return false;
 
-    // User can edit if they have edit permissions and either:
-    // 1. They are the creator of the event, OR
-    // 2. They have full edit permissions (admin/owner)
-    return userPermissions.canEdit && (
-      !event.createdBy ||
-      event.createdBy.Id === currentUserId ||
-      userPermissions.canDelete // Assuming delete permission means full access
-    );
-  };
-
-  // Check if user can delete a specific event
-  const canDeleteEvent = (event: ICalendarEvent): boolean => {
-    if (!userPermissions.canDelete) return false;
-
-    // User can delete if they have delete permissions and either:
-    // 1. They are the creator of the event, OR
-    // 2. They have full delete permissions (admin/owner)
-    return userPermissions.canDelete && (
-      !event.createdBy ||
-      event.createdBy.Id === currentUserId ||
-      userPermissions.canDelete // Full delete access
-    );
-  };
 
   const handleSelectEvent = (event: ICalendarEvent) => {
     // Only allow viewing/editing if user has permissions
-    if (!userPermissions.canView) return;
-
+   
     setSelectedEvent(event);
     setIsNewEvent(false);
     setShowModal(true);
@@ -1096,9 +1137,7 @@ export default function ModernCalendar(props: any) {
 
   const handleSelectSlot = ({ start, end }: { start: Date; end: Date }) => {
     // Only allow creating new events if user has add permission
-    if (!userPermissions.canAdd) return;
-
-    const newEvent: ICalendarEvent = {
+     const newEvent: ICalendarEvent = {
       id: '',
       title: '',
       locations: '',
@@ -1121,37 +1160,27 @@ export default function ModernCalendar(props: any) {
     setShowModal(true);
   };
 
-  const categoryOptionsColor: any = {
-    'Meeting': '#3174ad',          
-    'RFQ': '#ffff00',            
-    'RFP': '#107c10',               
-    'CSP/Traditional': '#da3b01',   
-    'DB': '#c239b3',               
-    'Interview': '#adadad',        
-    'Appointment': '#0099bc',     
-    'Site Visit': '#00b294',   
-    'Remote': '#004e8c',
-    'Interview Prep': '#ffaa44',  
-    'Other': '#605e5c',             
-    'PTO': '#e3008c'                
+  const siteColorMap: Record<string, { Color: string; FontColor: string }> = {
+    'marketing': {
+      Color: '#3174ad',
+      FontColor: '#fff'
+    },
+    'modernhr': {
+      Color: '#107c10',
+      FontColor: '#000'
+    }
   };
-  
-  const categoryOptionsFontColor: any = {
-    'Meeting': '#fff',         
-    'RFQ': '#000000',        
-    'RFP': '#fff',             
-    'CSP/Traditional': '#fff',     
-    'DB': '#fff',                 
-    'Interview': '#000000',      
-    'Appointment': '#fff',       
-    'Site Visit': '#000',           
-    'Interview Prep': '#000',       
-    'Other': '#fff',                
-    'Remote': '#fff',               
-    'PTO': '#fff'                   
-  };
+  function getSiteNameFromUrl(siteUrl: string): string {
+    const match = siteUrl?.toLowerCase()?.match(/\/sites\/([^\/\?\#]+)/);
+    return match ? match[1] : '';
+  }
 
-  function eventDataForBinding(eventDetails: any, currentDate: Date) {
+  function eventDataForBinding(eventDetails: any, currentDate: Date,) {
+    const siteName = getSiteNameFromUrl(eventDetails?.siteUrl); // normalized and lowercase
+const siteColors = siteColorMap[siteName] || {
+  Color: '#3174ad',     // default fallback
+  FontColor: '#fff'
+};
     return {
       ...eventDetails,
       id: eventDetails.Id,
@@ -1163,22 +1192,13 @@ export default function ModernCalendar(props: any) {
       startTime: new Date(currentDate),
       endTime: new Date(currentDate),
       RecurrenceData: eventDetails.RecurrenceData,
-      Color: categoryOptionsColor[eventDetails?.Category] ? categoryOptionsColor[eventDetails?.Category] : '#3174ad',
-      FontColor: categoryOptionsFontColor[eventDetails?.Category] ? categoryOptionsFontColor[eventDetails?.Category] : '#fff',
+      Color: siteColors.Color,
+      FontColor: siteColors.FontColor
     };
   }
 
   const saveEvent = (event: ICalendarEvent) => {
-    if (isNewEvent && !userPermissions.canAdd) {
-      console.warn('User does not have permission to add events');
-      return;
-    }
-
-    if (!isNewEvent && !canEditEvent(event)) {
-      console.warn('User does not have permission to edit this event');
-      return;
-    }
-
+   
     if (isNewEvent) {
       createEvent(event);
     } else {
@@ -1188,30 +1208,17 @@ export default function ModernCalendar(props: any) {
   };
 
   const createEvent = async (event: ICalendarEvent) => {
-    if (!userPermissions.canAdd) {
-      console.warn('User does not have permission to add events');
-      return;
-    }
     showLoader('Loading...');
     loadEvents();
   };
 
   const updateEvent = async (event: ICalendarEvent) => {
-    if (!canEditEvent(event)) {
-      console.warn('User does not have permission to edit this event');
-      return;
-    }
     showLoader('Loading...');
     loadEvents();
   };
 
   const deleteEvent = async (eventId: string) => {
     const event = events.find(e => e.id === eventId);
-    if (!event || !canDeleteEvent(event)) {
-      console.warn('User does not have permission to delete this event');
-      return;
-    }
-
     try {
       await sp.web.lists.getById(props.MarketingCalendarId).items.getById(parseInt(eventId)).recycle();
       loadEvents();
@@ -1270,11 +1277,9 @@ export default function ModernCalendar(props: any) {
             className="rbc-event-preview"
             onClick={(e) => {
               e.stopPropagation();
-              if (userPermissions.canView) {
-                handleSelectEvent(event);
-              }
+          
             }}
-            style={{ cursor: userPermissions.canView ? 'pointer' : 'default' }}
+            style={{ cursor: 'default' }}
           >
             <div className="event-title">
               {event.fAllDayEvent ? (
@@ -1296,11 +1301,9 @@ export default function ModernCalendar(props: any) {
             className="rbc-show-more"
             onClick={(e) => {
               e.stopPropagation();
-              if (userPermissions.canView) {
-                handleShowMoreEvents(events, date);
-              }
+            
             }}
-            style={{ cursor: userPermissions.canView ? 'pointer' : 'default' }}
+            style={{ cursor:  'default' }}
           >
             +{moreEventsCount} more
           </div>
@@ -1313,13 +1316,7 @@ export default function ModernCalendar(props: any) {
     return (
       <div
         className="panel-event"
-        onClick={() => {
-          if (userPermissions.canView) {
-            setShowDatePanel(false);
-            handleSelectEvent(item);
-          }
-        }}
-        style={{ cursor: userPermissions.canView ? 'pointer' : 'default' }}
+        style={{ cursor: 'default' }}
       >
         {item.fAllDayEvent ? (
           <span className="event-title">{item.title} (All day)</span>
@@ -1356,13 +1353,7 @@ export default function ModernCalendar(props: any) {
         return (
           <div
             className="rbc-event-preview"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (userPermissions.canView) {
-                handleSelectEvent(event);
-              }
-            }}
-            style={{ cursor: userPermissions.canView ? 'pointer' : 'default' }}
+            style={{ cursor: 'default' }}
           >
             <div className="event-title">
               <span>{event.title}</span>
@@ -1389,22 +1380,6 @@ export default function ModernCalendar(props: any) {
   };
 
   // Don't render calendar if user doesn't have view permission
-  if (!userPermissions.canView) {
-    return (
-      <div className={'modernCalendar'}>
-        <div className={'container'}>
-          <div className={'row'}>
-            <div className={'column'}>
-              <h2>{props?.CalendarTitle}</h2>
-              <div style={{ padding: '20px', textAlign: 'center' }}>
-                <p>You don't have permission to view this calendar.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={'modernCalendar'}>
@@ -1413,6 +1388,7 @@ export default function ModernCalendar(props: any) {
           <div className={'column'}>
             <h2>{props?.CalendarTitle}</h2>
             <div className={'calendarContainer'}>
+              <button type='button' onClick={()=>copyEventsToAnotherListSafe('7c610f9a-b52a-4300-a4d7-85523d35cc3f','5B6D97F6-5704-4E02-BC27-493ED1044D0B')}>Migrate Data </button>
               <Calendar
                 localizer={localizer}
                 events={events.map(event => ({
@@ -1425,9 +1401,9 @@ export default function ModernCalendar(props: any) {
                 endAccessor="endTime"
                 titleAccessor="title"
                 style={{ height: 600 }}
-                selectable={userPermissions.canAdd} // Only allow selection if user can add
+                selectable={false} // Only allow selection if user can add
                 onSelectEvent={handleSelectEvent}
-                onSelectSlot={userPermissions.canAdd ? handleSelectSlot : undefined} // Only allow slot selection if user can add
+                onSelectSlot={ undefined} // Only allow slot selection if user can add
                 onNavigate={handleNavigate}
                 views={['month', 'week', 'day', 'agenda']}
                 components={components}
@@ -1447,9 +1423,6 @@ export default function ModernCalendar(props: any) {
           MarketingCalendarId={props?.MarketingCalendarId}
           onCancel={() => setShowModal(false)}
           // Pass permission props to EventForm
-          userPermissions={userPermissions}
-          canEditEvent={selectedEvent ? canEditEvent(selectedEvent) : false}
-          canDeleteEvent={selectedEvent ? canDeleteEvent(selectedEvent) : false}
         />
       )}
       <Panel

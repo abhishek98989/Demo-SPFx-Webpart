@@ -18,7 +18,7 @@ import { DatePicker } from '@fluentui/react/lib/DatePicker';
 import { TimePicker } from '@fluentui/react/lib/TimePicker';
 import { Dropdown, IDropdownOption } from '@fluentui/react/lib/Dropdown';
 import { Toggle } from '@fluentui/react/lib/Toggle';
-import { ICalendarEvent } from './CalendarEvent';
+import { ICalendarEvent } from './ConsolidatedCalendarEvent';
 import { EventRecurrenceInfo } from '../../../globalCommon/EventRecurrenceControls/EventRecurrenceInfo/EventRecurrenceInfo';
 import { spfi, SPFx } from '@pnp/sp';
 import { parseRecurrenceToString } from '../../../globalCommon/reccurenceStringToText';

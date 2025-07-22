@@ -119,7 +119,8 @@ export default class MarketingCalendarWebPart extends BaseClientSideWebPart<IMar
                   label: 'Calendar',
                   options: [
                     { key: 'Marketing Calendar', text: 'Marketing Calendar' },
-                    { key: 'Marketing Calendar-Internal', text: 'Marketing Calendar-Internal' }
+                    { key: 'Marketing Calendar-Internal', text: 'Marketing Calendar-Internal' },
+                    { key: 'Training Calendar', text: 'Training Calendar' }
                   ],
                   selectedKey: this.properties.description || 'table'
                 }),

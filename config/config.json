@@ -33,6 +33,14 @@
           "manifest": "./src/webparts/postsArchive/PostsArchiveWebPart.manifest.json"
         }
       ]
+    },
+    "consolidated-calendar-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/consolidatedCalendar/ConsolidatedCalendarWebPart.js",
+          "manifest": "./src/webparts/consolidatedCalendar/ConsolidatedCalendarWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},
@@ -41,6 +49,7 @@
     "ControlStrings": "node_modules/@pnp/spfx-controls-react/lib/loc/{locale}.js",
     "LearnerBlogPostWebPartStrings": "lib/webparts/learnerBlogPost/loc/{locale}.js",
     "MarketingCalendarWebPartStrings": "lib/webparts/marketingCalendar/loc/{locale}.js",
-    "PostsArchiveWebPartStrings": "lib/webparts/postsArchive/loc/{locale}.js"
+    "PostsArchiveWebPartStrings": "lib/webparts/postsArchive/loc/{locale}.js",
+    "ConsolidatedCalendarWebPartStrings": "lib/webparts/consolidatedCalendar/loc/{locale}.js"
   }
 }
