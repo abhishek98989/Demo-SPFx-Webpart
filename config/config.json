@@ -41,6 +41,30 @@
           "manifest": "./src/webparts/consolidatedCalendar/ConsolidatedCalendarWebPart.manifest.json"
         }
       ]
+    },
+    "weekly-words-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/weeklyWords/WeeklyWordsWebPart.js",
+          "manifest": "./src/webparts/weeklyWords/WeeklyWordsWebPart.manifest.json"
+        }
+      ]
+    },
+    "sharepoint-feedback-form-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/sharepointFeedbackForm/SharepointFeedbackFormWebPart.js",
+          "manifest": "./src/webparts/sharepointFeedbackForm/SharepointFeedbackFormWebPart.manifest.json"
+        }
+      ]
+    },
+    "people-library-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/peopleLibrary/PeopleLibraryWebPart.js",
+          "manifest": "./src/webparts/peopleLibrary/PeopleLibraryWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},
@@ -50,6 +74,9 @@
     "LearnerBlogPostWebPartStrings": "lib/webparts/learnerBlogPost/loc/{locale}.js",
     "MarketingCalendarWebPartStrings": "lib/webparts/marketingCalendar/loc/{locale}.js",
     "PostsArchiveWebPartStrings": "lib/webparts/postsArchive/loc/{locale}.js",
-    "ConsolidatedCalendarWebPartStrings": "lib/webparts/consolidatedCalendar/loc/{locale}.js"
+    "ConsolidatedCalendarWebPartStrings": "lib/webparts/consolidatedCalendar/loc/{locale}.js",
+    "WeeklyWordsWebPartStrings": "lib/webparts/weeklyWords/loc/{locale}.js",
+    "SharepointFeedbackFormWebPartStrings": "lib/webparts/sharepointFeedbackForm/loc/{locale}.js",
+    "PeopleLibraryWebPartStrings": "lib/webparts/peopleLibrary/loc/{locale}.js"
   }
 }

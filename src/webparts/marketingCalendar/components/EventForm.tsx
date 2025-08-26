@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import { useState, useEffect } from 'react';
 import { Dialog, DialogType, DialogFooter } from '@fluentui/react/lib/Dialog';
 import { PrimaryButton, DefaultButton, IconButton } from '@fluentui/react/lib/Button';
@@ -37,18 +37,19 @@ interface IEventFormProps {
   event: ICalendarEvent | null;
   isNew: boolean;
   Context: any;
-  CalendarTitle?:any|null;
-  userPermissions?:any|null;
+  CalendarTitle?: any | null;
+  userPermissions?: any | null;
   MarketingCalendarId: any;
   onSave: (event: ICalendarEvent) => void;
   onDelete: (eventId: string) => void;
   onCancel: () => void;
-  canEditEvent?:any|null;
-canDeleteEvent?:any|null;
+  canEditEvent?: any | null;
+  canDeleteEvent?: any | null;
+  siteUrl?: string;
 }
 
 const EventForm: React.FC<IEventFormProps> = (props) => {
-  const sp = spfi().using(SPFx(props?.Context));
+  const sp = props?.siteUrl != undefined ? spfi(props?.siteUrl).using(SPFx(props?.Context)) : spfi().using(SPFx(props?.Context));
   const [isAllDay, setIsAllDay] = useState(false);
   const [formData, setFormData] = useState<ICalendarEvent>({
     id: '',
@@ -93,7 +94,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
   useEffect(() => {
     if (props.event) {
       setFormData({ ...props.event });
-      if(props.event.fAllDayEvent === true){
+      if (props.event.fAllDayEvent === true) {
         setIsAllDay(true);
       }
       // Check if this is a recurring event by looking for RecurrenceData
@@ -104,13 +105,20 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
         setEditRecurrenceEvent(true);  // Flag as editing recurrence
       }
     }
-    if(props?.CalendarTitle=='Marketing Calendar-Internal'){
+    if (props?.CalendarTitle == 'Marketing Calendar-Internal') {
       setCategoryOptions([
         { key: 'PTO', text: 'PTO' },
         { key: 'Remote', text: 'Remote' },
         { key: 'Appointment', text: 'Appointment' },
         { key: 'Site Visit', text: 'Site Visit' },
         { key: 'Interview Prep', text: 'Interview Prep' },
+        { key: 'Other', text: 'Other' }
+      ]);
+    } else if (props?.CalendarTitle == 'Company Calendar') {
+      setCategoryOptions([
+        { key: 'Safety', text: 'Safety' },
+        { key: 'Ops', text: 'Ops' },
+        { key: 'HR', text: 'HR' },
         { key: 'Other', text: 'Other' }
       ]);
     }
@@ -140,7 +148,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       ...prevData,
       [field]: value
     }));
-    
+
     // Clear error for this field when user starts typing
     if (errors[field]) {
       setErrors(prev => ({
@@ -179,7 +187,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       console.warn('User does not have permission to add events');
       return;
     }
-    
+
     if (!props?.isNew && !props?.canEditEvent) {
       console.warn('User does not have permission to edit this event');
       return;
@@ -197,7 +205,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
     } else if (recurrenceData && editRecurrenceEvent) {
       eventToSave.RecurrenceData = recurrenceData;
     }
-    
+
     try {
       let Item: any = {
         Title: eventToSave.title,
@@ -212,11 +220,11 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
         // For SharePoint all-day events, both start and end dates should be the same day
         // Extract just the date portion without any timezone conversion
         const dateOnly = moment(eventToSave.startTime).format('YYYY-MM-DD');
-        
+
         // Set both start and end time to the same date at 00:00:00 and WITHOUT 'Z' suffix
         Item.EventDate = `${dateOnly}T00:00:00`;
         Item.EndDate = `${dateOnly}T23:59:59`;  // End of the same day
-        
+
         // Make sure the all-day flag is set
         Item.fAllDayEvent = true;
       } else {
@@ -229,7 +237,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       if (eventToSave.RecurrenceData) {
         Item.RecurrenceData = eventToSave.RecurrenceData;
       }
-      
+
       if (props.isNew) {
         await sp.web.lists.getById(props.MarketingCalendarId).items.add(Item).then((response: any) => {
           console.log('Item Added successfully:', response);
@@ -256,17 +264,17 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
   const onRenderStartDatePickerDay = (date: Date): JSX.Element => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     return <div>{date.getDate()}</div>;
   };
 
   const onRenderEndDatePickerDay = (date: Date): JSX.Element => {
     const startDate = new Date(formData.startTime);
     startDate.setHours(0, 0, 0, 0);
-    
+
     // For end date, disable dates before the start date
     const isBeforeStartDate = date < startDate;
-    
+
     return (
       <div style={isBeforeStartDate ? { color: '#d0d0d0', fontWeight: 'normal' } : {}}>
         {date.getDate()}
@@ -277,7 +285,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
   // Custom function to handle time change safely
   const handleTimeChange = (field: 'startTime' | 'endTime', newTime: Date | null) => {
     if (!newTime) return;
-    
+
     try {
       const currentDate = formData[field];
       const updatedDate = new Date(
@@ -288,13 +296,13 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
         newTime.getMinutes(),
         0
       );
-      
+
       handleInputChange(field, updatedDate);
-      
+
       // If updating start time, check if we need to adjust end time
       if (field === 'startTime') {
         const currentEndTime = formData.endTime;
-        
+
         // If new start time is later than end time, adjust end time
         if (updatedDate >= currentEndTime) {
           const newEndTime = new Date(updatedDate.getTime() + 60 * 60 * 1000); // 1 hour later
@@ -368,7 +376,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
   };
 
   const renderDescriptionField = () => {
-    if (props?.CalendarTitle === 'Training Calendar') {
+    if (props?.CalendarTitle === 'Company Calendar') {
       return (
         <div>
           <Label>Description</Label>
@@ -412,7 +420,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
       headerText={props.isNew ? "Add Event" : "Edit Event"}
       type={PanelType.medium}
       onRenderFooterContent={renderFooterContent}
-      isFooterAtBottom={true} 
+      isFooterAtBottom={true}
     >
       <Stack tokens={stackTokens} styles={stackStyles}>
         <TextField
@@ -561,7 +569,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
               startDate={formData.startTime}
               endDate={formData.endTime}
               returnRecurrenceInfo={returnRecurrenceInfo}
-              siteUrl={props.Context.pageContext.web.absoluteUrl}
+              siteUrl={ props?.siteUrl != undefined ? props?.siteUrl : props.Context.pageContext.web.absoluteUrl}
               recurrenceData={!isEditingRecurrence ? recurrenceData : ''}
               removeRecurrence={true}  // Enable editing of recurrence
               selectedRecurrenceRule={!isEditingRecurrence ? getRecurrenceRule(returnedRecurrenceInfo?.recurrenceData) : ''}
@@ -574,6 +582,7 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
               <Stack horizontal horizontalAlign="end" tokens={{ childrenGap: 8 }}>
                 <PrimaryButton text="Update Recurrence" onClick={saveRecurrenceChanges} />
                 <DefaultButton text="Cancel" onClick={cancelRecurrenceChanges} />
+                <a href="http://" target="_blank" rel="noopener noreferrer">OOTB</a>
               </Stack>
             )}
           </Stack>

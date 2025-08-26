@@ -1,10 +1,8 @@
-export interface IMarketingCalendarProps {
+export interface ISharepointFeedbackFormProps {
   description: string;
   isDarkTheme: boolean;
   environmentMessage: string;
   hasTeamsContext: boolean;
   userDisplayName: string;
-  Context: any;
-  MarketingCalendarId: any;
-  siteUrl:any
+  context: any; // SPFx context
 }

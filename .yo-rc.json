@@ -3,10 +3,7 @@
     "plusBeta": false,
     "isCreatingSolution": false,
     "nodeVersion": "18.18.0",
-    "sdksVersions": {
-      "@microsoft/microsoft-graph-client": "3.0.2",
-      "@microsoft/teams-js": "2.24.0"
-    },
+    "sdksVersions": {},
     "version": "1.18.2",
     "libraryName": "demowebpart",
     "libraryId": "54e514dc-bbf4-4a3b-8381-6f9ef6086431",

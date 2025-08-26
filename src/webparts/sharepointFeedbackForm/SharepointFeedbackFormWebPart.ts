@@ -3,40 +3,34 @@ import * as ReactDom from 'react-dom';
 import { Version } from '@microsoft/sp-core-library';
 import {
   type IPropertyPaneConfiguration,
-  PropertyPaneDropdown,
   PropertyPaneTextField
 } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 
-import * as strings from 'MarketingCalendarWebPartStrings';
-import MarketingCalendar from './components/MarketingCalendar';
-import { IMarketingCalendarProps } from './components/IMarketingCalendarProps';
+import * as strings from 'SharepointFeedbackFormWebPartStrings';
+import SharepointFeedbackForm from './components/SharepointFeedbackForm';
+import { ISharepointFeedbackFormProps } from './components/ISharepointFeedbackFormProps';
 
-export interface IMarketingCalendarWebPartProps {
+export interface ISharepointFeedbackFormWebPartProps {
   description: string;
-  Context:any;
-  MarketingCalendarId:any;
-  siteUrl: string;
 }
 
-export default class MarketingCalendarWebPart extends BaseClientSideWebPart<IMarketingCalendarWebPartProps> {
+export default class SharepointFeedbackFormWebPart extends BaseClientSideWebPart<ISharepointFeedbackFormWebPartProps> {
 
   private _isDarkTheme: boolean = false;
   private _environmentMessage: string = '';
 
   public render(): void {
-    const element: React.ReactElement<IMarketingCalendarProps> = React.createElement(
-      MarketingCalendar,
+    const element: React.ReactElement<ISharepointFeedbackFormProps> = React.createElement(
+      SharepointFeedbackForm,
       {
         description: this.properties.description,
         isDarkTheme: this._isDarkTheme,
         environmentMessage: this._environmentMessage,
         hasTeamsContext: !!this.context.sdks.microsoftTeams,
         userDisplayName: this.context.pageContext.user.displayName,
-        Context: this.context,
-        MarketingCalendarId: this.properties.MarketingCalendarId,
-        siteUrl: this.properties.siteUrl
+        context:this.context
       }
     );
 
@@ -115,22 +109,8 @@ export default class MarketingCalendarWebPart extends BaseClientSideWebPart<IMar
             {
               groupName: strings.BasicGroupName,
               groupFields: [
-               
-               
-                PropertyPaneDropdown('description', {
-                  label: 'Calendar',
-                  options: [
-                    { key: 'Marketing Calendar', text: 'Marketing Calendar' },
-                    { key: 'Marketing Calendar-Internal', text: 'Marketing Calendar-Internal' },
-                    { key: 'Company Calendar', text: 'Company Calendar' }
-                  ],
-                  selectedKey: this.properties.description || 'table'
-                }),
-                PropertyPaneTextField('MarketingCalendarId', {
-                  label: 'Calendar List Id'
-                }),
-                PropertyPaneTextField('siteUrl', {
-                  label: 'Site URL'
+                PropertyPaneTextField('description', {
+                  label: strings.DescriptionFieldLabel
                 })
               ]
             }

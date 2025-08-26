@@ -58,7 +58,7 @@ export default function ModernCalendar(props: any) {
   const [isNewEvent, setIsNewEvent] = useState<boolean>(true);
   const [currentCalendarDate, setCurrentCalendarDate] = useState<Date>(new Date());
   const [currentCalendarView, setCurrentCalendarView] = useState<String>('month');
-  const sp = spfi().using(SPFx(props?.Context));
+  const sp = props?.siteUrl != undefined ? spfi(props?.siteUrl).using(SPFx(props?.Context)) : spfi().using(SPFx(props?.Context));
   const [showDatePanel, setShowDatePanel] = useState(false);
   const [selectedDateEvents, setSelectedDateEvents] = useState<ICalendarEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -136,8 +136,10 @@ export default function ModernCalendar(props: any) {
 
       const NonRecurrenceData = items.filter((item) => item?.RecurrenceData == null);
       const Recurrencedatas = items.filter((item) => item?.RecurrenceData != null && item?.RecurrenceData != 'Every 1 day(s)');
+      const isTraining = props?.CalendarTitle == 'Company Calendar';
 
       const calendarEvents: ICalendarEvent[] = NonRecurrenceData.map((item: any) => {
+        const { Color, FontColor } = getCategoryColors(item?.Category, isTraining);
         return {
           id: item.Id.toString(),
           title: item.Title || '',
@@ -156,8 +158,8 @@ export default function ModernCalendar(props: any) {
           modifiedBy: item.Editor ? item.Editor.Title : '',
           RecurrenceData: item.RecurrenceData || null,
           fAllDayEvent: item.fAllDayEvent || false,
-          Color: categoryOptionsColor[item?.Category] ? categoryOptionsColor[item?.Category] : '#3174ad',
-          FontColor: categoryOptionsFontColor[item?.Category] ? categoryOptionsFontColor[item?.Category] : '#fff',
+          Color,
+          FontColor
         };
       });
 
@@ -1122,36 +1124,65 @@ export default function ModernCalendar(props: any) {
   };
 
   const categoryOptionsColor: any = {
-    'Meeting': '#3174ad',          
-    'RFQ': '#ffff00',            
-    'RFP': '#107c10',               
-    'CSP/Traditional': '#da3b01',   
-    'DB': '#c239b3',               
-    'Interview': '#adadad',        
-    'Appointment': '#0099bc',     
-    'Site Visit': '#00b294',   
+    'Meeting': '#3174ad',
+    'RFQ': '#ffff00',
+    'RFP': '#107c10',
+    'CSP/Traditional': '#da3b01',
+    'DB': '#c239b3',
+    'Interview': '#adadad',
+    'Appointment': '#0099bc',
+    'Site Visit': '#00b294',
     'Remote': '#004e8c',
-    'Interview Prep': '#ffaa44',  
-    'Other': '#605e5c',             
-    'PTO': '#e3008c'                
+    'Interview Prep': '#ffaa44',
+    'Other': '#605e5c',
+    'PTO': '#e3008c'
   };
-  
+  const categoryOptionsColorTraining: any = {
+    'Safety': '#ff0000',
+    'Ops': '#3174ad',
+    'HR': '#107c10',
+    'Other': '#ffff00',
+  };
+  const categoryOptionsFontColorTraining: any = {
+    'Safety': '#ffffff',
+     'Ops': '#ffffff',
+    'HR': '#ffffff',
+    'Other': '#000000',
+  };
   const categoryOptionsFontColor: any = {
-    'Meeting': '#fff',         
-    'RFQ': '#000000',        
-    'RFP': '#fff',             
-    'CSP/Traditional': '#fff',     
-    'DB': '#fff',                 
-    'Interview': '#000000',      
-    'Appointment': '#fff',       
-    'Site Visit': '#000',           
-    'Interview Prep': '#000',       
-    'Other': '#fff',                
-    'Remote': '#fff',               
-    'PTO': '#fff'                   
+    'Meeting': '#fff',
+    'RFQ': '#000000',
+    'RFP': '#fff',
+    'CSP/Traditional': '#fff',
+    'DB': '#fff',
+    'Interview': '#000000',
+    'Appointment': '#fff',
+    'Site Visit': '#000',
+    'Interview Prep': '#000',
+    'Other': '#fff',
+    'Remote': '#fff',
+    'PTO': '#fff'
   };
 
+  // Helper to get color/fontColor based on calendar type
+  function getCategoryColors(category: string, isTraining: boolean) {
+    if (isTraining) {
+      return {
+        Color: categoryOptionsColorTraining[category] ? categoryOptionsColorTraining[category] : '#3174ad',
+        FontColor: categoryOptionsFontColorTraining[category] ? categoryOptionsFontColorTraining[category] : '#fff',
+      };
+    } else {
+      return {
+        Color: categoryOptionsColor[category] ? categoryOptionsColor[category] : '#3174ad',
+        FontColor: categoryOptionsFontColor[category] ? categoryOptionsFontColor[category] : '#fff',
+      };
+    }
+  }
+
+  // Update eventDataForBinding to use getCategoryColors
   function eventDataForBinding(eventDetails: any, currentDate: Date) {
+    const isTraining = props?.CalendarTitle == 'Company Calendar';
+    const { Color, FontColor } = getCategoryColors(eventDetails?.Category, isTraining);
     return {
       ...eventDetails,
       id: eventDetails.Id,
@@ -1163,8 +1194,8 @@ export default function ModernCalendar(props: any) {
       startTime: new Date(currentDate),
       endTime: new Date(currentDate),
       RecurrenceData: eventDetails.RecurrenceData,
-      Color: categoryOptionsColor[eventDetails?.Category] ? categoryOptionsColor[eventDetails?.Category] : '#3174ad',
-      FontColor: categoryOptionsFontColor[eventDetails?.Category] ? categoryOptionsFontColor[eventDetails?.Category] : '#fff',
+      Color,
+      FontColor,
     };
   }
 
@@ -1450,6 +1481,7 @@ export default function ModernCalendar(props: any) {
           userPermissions={userPermissions}
           canEditEvent={selectedEvent ? canEditEvent(selectedEvent) : false}
           canDeleteEvent={selectedEvent ? canDeleteEvent(selectedEvent) : false}
+          siteUrl={props?.siteUrl}
         />
       )}
       <Panel
