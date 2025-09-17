@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
   "solution": {
-    "name": "demowebpart-client-side-solution",
+    "name": "vaughnconstruction-client-side-solution",
     "id": "54e514dc-bbf4-4a3b-8381-6f9ef6086431",
     "version": "1.0.0.0",
     "includeClientSideAssets": true,
@@ -26,10 +26,10 @@
     },
     "metadata": {
       "shortDescription": {
-        "default": "Demowebpart description"
+        "default": "vaughnconstruction description"
       },
       "longDescription": {
-        "default": "Demowebpart description"
+        "default": "vaughnconstruction description"
       },
       "screenshotPaths": [],
       "videoUrl": "",
@@ -37,14 +37,14 @@
     },
     "features": [
       {
-        "title": "demowebpart Feature",
-        "description": "The feature that activates elements of the demowebpart solution.",
+        "title": "vaughnconstruction Feature",
+        "description": "The feature that activates elements of the vaughnconstruction solution.",
         "id": "4b107b60-ef25-4a47-bc2e-aa3ec197f417",
         "version": "1.0.0.0"
       }
     ]
   },
   "paths": {
-    "zippedPackage": "solution/demowebpart.sppkg"
+    "zippedPackage": "solution/vaughnconstruction.sppkg"
   }
 }

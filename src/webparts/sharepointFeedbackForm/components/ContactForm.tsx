@@ -2,8 +2,7 @@ import * as React from 'react';
 import { useState } from 'react';
 import styles from './SharepointFeedbackForm.module.scss';
 import { spfi, SPFx } from '@pnp/sp/presets/all';
-import { IEmailProperties } from '@pnp/sp/sputilities';
-
+import { DefaultButton, PrimaryButton } from '@fluentui/react';
 interface IContactFormProps {
     context?: any; // SPFx context
 }
@@ -19,7 +18,7 @@ interface IContactFormState {
 }
 
 const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
-    const sp = spfi().using(SPFx(context));
+    const sp = spfi('https://vaughnconstruction.sharepoint.com').using(SPFx(context));
     const [state, setState] = useState<IContactFormState>({
         showForm: false,
         message: '',
@@ -57,37 +56,17 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
         }));
     };
 
-    const sendEmail = async (): Promise<void> => {
+    const addToSharePointList = async (): Promise<void> => {
         try {
-            const confirmationEmailBody = `
-        <html>
-          <body>
-            <p>Dear ${state.userName},</p>
-            <p>Thank you for contacting us. Our team will review your message and get back to you.</p>
-            <br/>
-            <p><strong>Original Message:</strong></p>
-            <div style="border-left: 3px solid #ccc; padding-left: 15px; margin-left: 10px;">
-              <p>${state.message.replace(/\n/g, '<br/>')}</p>
-            </div>
-            <br/>
-            <p>Best regards,<br/>
-            Vaughn SharePoint Committee</p>
-          </body>
-        </html>
-      `;
+            const currentDate = new Date().toLocaleDateString();
+            const listGuid = 'b1d451db-4d9e-40e7-af56-9cf204d81664';
 
-            const emailProps: IEmailProperties = {
-                To: [state.userEmail,'vaughnsharepointcommittee@vaughnconstruction.com'],
-                Subject: 'Thank you for contacting Vaughn SharePoint Support',
-                Body: confirmationEmailBody,
-                AdditionalHeaders: {
-                    "content-type": "text/html"
-                }
+            const listItem = {
+                Title: `Feedback (${currentDate} - by ${state.userName})`,
+                Feedback: state.message
             };
 
-            await sp.utility.sendEmail(emailProps);
-
-      
+            await sp.web.lists.getById(listGuid).items.add(listItem);
 
             setState(prevState => ({
                 ...prevState,
@@ -98,11 +77,11 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
             }));
 
         } catch (error) {
-            console.error('Error sending email:', error);
+            console.error('Error adding item to SharePoint list:', error);
             setState(prevState => ({
                 ...prevState,
                 isSubmitting: false,
-                submitError: 'Failed to send message. Please try again.'
+                submitError: 'Failed to submit feedback. Please try again.'
             }));
         }
     };
@@ -124,7 +103,7 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
             submitError: ''
         }));
 
-        await sendEmail();
+        await addToSharePointList();
     };
 
     const handleCancel = (): void => {
@@ -140,14 +119,13 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
         <div className={styles.contactForm}>
             <div className={styles.messageContainer}>
                 <p className={styles.mainMessage}>
-                    If you are facing any issue or problem related to the Vaughn SharePoint or Intranet,
-                    <button
-                        className={styles.contactButton}
+                    If you are facing any issue or problem related to the Vaughn SharePoint or Intranet, &nbsp;
+                    <PrimaryButton
+                        text="Contact us"
                         onClick={handleContactClick}
                         type="button"
-                    >
-                        Contact us
-                    </button>
+                        styles={{ root: { minWidth: '40px' } }}
+                    />
                 </p>
             </div>
 
@@ -180,21 +158,17 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
                         )}
 
                         <div className={styles.buttonGroup}>
-                            <button
+                            <PrimaryButton
+                                text={state.isSubmitting ? 'Sending...' : 'Submit'}
                                 type="submit"
-                                className={`${styles.submitButton} ${state.isSubmitting ? styles.submitting : ''}`}
                                 disabled={state.isSubmitting}
-                            >
-                                {state.isSubmitting ? 'Sending...' : 'Submit'}
-                            </button>
-                            <button
-                                type="button"
-                                className={styles.cancelButton}
+                            />
+                            <DefaultButton
+                                text="Cancel"
+                                disabled={state.isSubmitting}
                                 onClick={handleCancel}
-                                disabled={state.isSubmitting}
-                            >
-                                Cancel
-                            </button>
+                                  type="button"
+                            />
                         </div>
                     </form>
                 </div>
@@ -202,7 +176,7 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
 
             {state.submitSuccess && (
                 <div className={styles.successMessage}>
-                    <p>✓ Thank you! Your message has been sent successfully. You will receive a confirmation email shortly.</p>
+                    <p>✓ Thank you! Your feedback has been submitted successfully.</p>
                 </div>
             )}
         </div>

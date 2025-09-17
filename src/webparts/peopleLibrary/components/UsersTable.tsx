@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { MSGraphClientV3, MSGraphClientFactory } from '@microsoft/sp-http';
 import { ResponseType } from '@microsoft/microsoft-graph-client';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
@@ -25,6 +25,8 @@ import {
     DefaultButton,
     Toggle,
 } from '@fluentui/react';
+import { LivePersona } from '@pnp/spfx-controls-react/lib/LivePersona';
+import { ServiceScope } from '@microsoft/sp-core-library';
 import styles from './PeopleLibrary.module.scss';
 
 // Interface for user data from Microsoft Graph
@@ -37,10 +39,10 @@ interface IUserData {
     officeLocation: string;
     jobTitle: string;
     ipPhone: any;
-    companyName:string
+    companyName: string;
     userPrincipalName: string;
-    userType?: string; // Added to help with guest user filtering
-    accountEnabled?: boolean; // Added to filter disabled accounts
+    userType?: string;
+    accountEnabled?: boolean;
     photo?: string;
 }
 
@@ -48,6 +50,180 @@ interface IUserData {
 interface IUsersTableProps {
     context: WebPartContext;
 }
+
+// Photo cache to prevent duplicate requests and wrong photos
+const photoCache = new Map<string, { url: string | null; loading: boolean; error: boolean }>();
+
+// LivePersonaCard component with improved photo loading and caching
+interface ILivePersonaCardProps {
+    serviceScope: any;
+    userEmail: string;
+    displayName: string;
+    graphClient?: MSGraphClientV3;
+}
+
+const LivePersonaCard: React.FC<ILivePersonaCardProps> = ({
+    serviceScope,
+    userEmail,
+    displayName,
+    graphClient
+}) => {
+    const [photoState, setPhotoState] = useState<{ url: string | null; loading: boolean; error: boolean }>({
+        url: null,
+        loading: false,
+        error: false
+    });
+    
+    const mountedRef = useRef(true);
+    const loadingRef = useRef(false);
+    
+    // Normalize email for consistent caching
+    const normalizedEmail = userEmail?.toLowerCase().trim();
+
+    // Function to get initials from display name
+    const getInitials = (name: string): string => {
+        if (!name) return '??';
+        return name.trim().split(/\s+/).map((word: string) => word?.charAt(0).toUpperCase()).join('').substring(0, 2);
+    };
+
+    // Update state from cache
+    useEffect(() => {
+        if (!normalizedEmail) return;
+        
+        const cached = photoCache.get(normalizedEmail);
+        if (cached) {
+            setPhotoState(cached);
+        }
+    }, [normalizedEmail]);
+
+    // Load user photo with improved caching and race condition handling
+    useEffect(() => {
+        const loadPhoto = async () => {
+            if (!graphClient || !normalizedEmail || loadingRef.current) return;
+
+            // Check if already in cache
+            const cached = photoCache.get(normalizedEmail);
+            if (cached && (cached.url || cached.error)) {
+                setPhotoState(cached);
+                return;
+            }
+
+            // Prevent multiple simultaneous requests for same user
+            if (cached?.loading) return;
+
+            loadingRef.current = true;
+            const loadingState = { url: null, loading: true, error: false };
+            photoCache.set(normalizedEmail, loadingState);
+            setPhotoState(loadingState);
+
+            try {
+                // Try multiple identifiers to get the photo
+                let photoResponse;
+                try {
+                    // First try with email
+                    photoResponse = await graphClient
+                        .api(`/users/${userEmail}/photo/$value`)
+                        .responseType(ResponseType.BLOB)
+                        .get();
+                } catch (emailError) {
+                    // If email fails, try with UPN if different
+                    if (userEmail !== normalizedEmail) {
+                        photoResponse = await graphClient
+                            .api(`/users/${normalizedEmail}/photo/$value`)
+                            .responseType(ResponseType.BLOB)
+                            .get();
+                    } else {
+                        throw emailError;
+                    }
+                }
+
+                if (photoResponse && mountedRef.current) {
+                    let blob: Blob;
+                    if (photoResponse instanceof Blob) {
+                        blob = photoResponse;
+                    } else if (photoResponse.body instanceof Blob) {
+                        blob = photoResponse.body;
+                    } else {
+                        blob = new Blob([photoResponse.body || photoResponse], { type: 'image/jpeg' });
+                    }
+                    
+                    const url = URL.createObjectURL(blob);
+                    const successState = { url, loading: false, error: false };
+                    photoCache.set(normalizedEmail, successState);
+                    setPhotoState(successState);
+                }
+            } catch (error) {
+                console.log('Photo not available for user:', normalizedEmail);
+                const errorState = { url: null, loading: false, error: true };
+                photoCache.set(normalizedEmail, errorState);
+                if (mountedRef.current) {
+                    setPhotoState(errorState);
+                }
+            } finally {
+                loadingRef.current = false;
+            }
+        };
+
+        loadPhoto();
+    }, [graphClient, normalizedEmail, userEmail]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            mountedRef.current = false;
+        };
+    }, []);
+
+    // Create persona element with consistent photo state
+    const personaElement = (
+        <Persona
+            text={displayName}
+            size={PersonaSize.size40}
+            hidePersonaDetails={true}
+            imageUrl={photoState.url || undefined}
+            imageInitials={photoState.url ? undefined : getInitials(displayName)}
+            coinSize={40}
+        />
+    );
+
+    // If we have service scope and valid email, wrap with LivePersona for hover functionality
+    if (serviceScope && normalizedEmail && !photoState.error) {
+        return (
+            <div style={{ position: 'relative' }}>
+                {/* Visible persona with photo */}
+                {personaElement}
+                {/* Invisible LivePersona positioned over the visible one for hover functionality */}
+                <div style={{ 
+                    position: 'absolute', 
+                    top: 0, 
+                    left: 0, 
+                    width: '100%', 
+                    height: '100%', 
+                    opacity: 0,
+                    pointerEvents: 'all'
+                }}>
+                    <LivePersona
+                        serviceScope={serviceScope}
+                        upn={normalizedEmail}
+                        template={
+                            <Persona
+                                text={displayName}
+                                size={PersonaSize.size40}
+                                hidePersonaDetails={true}
+                                imageUrl={photoState.url || undefined}
+                                imageInitials={photoState.url ? undefined : getInitials(displayName)}
+                                coinSize={40}
+                            />
+                        }
+                    />
+                </div>
+            </div>
+        );
+    }
+
+    // Fallback to regular Persona only
+    return personaElement;
+};
 
 const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
     // State management
@@ -62,8 +238,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
     const [selectedAlphabet, setSelectedAlphabet] = useState<string>('');
     const [sortAscending, setSortAscending] = useState<boolean>(true);
     const [graphClient, setGraphClient] = useState<MSGraphClientV3 | null>(null);
-    const [photoCache, setPhotoCache] = useState<Map<string, string | undefined>>(new Map());
-    const [loadingPhotos, setLoadingPhotos] = useState<Set<string>>(new Set());
 
     const itemsPerPage = 20;
     const alphabetLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -83,233 +257,176 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         initializeGraphClient();
     }, [context]);
 
-    // Fetch user photo with caching
-    const fetchUserPhoto = async (userId: string): Promise<string | undefined> => {
-        if (!graphClient) return undefined;
-
-        // Check if photo is already cached
-        if (photoCache.has(userId)) {
-            return photoCache.get(userId);
-        }
-
-        // Check if photo is currently being loaded
-        if (loadingPhotos.has(userId)) {
-            return undefined;
-        }
-
+    // Fetch all users from Microsoft Graph (recursive to get all users)
+    const fetchAllUsers = async (
+        graphClient: MSGraphClientV3,
+        users: IUserData[] = [],
+        nextLink?: string
+    ): Promise<IUserData[]> => {
         try {
-            setLoadingPhotos(prev => new Set(prev).add(userId));
-
-            const photoResponse = await graphClient
-                .api(`/users/${userId}/photo/$value`)
-                .responseType(ResponseType.BLOB)
-                .get();
-
-            let photoUrl: string | undefined = undefined;
-
-            // Handle different response formats
-            if (photoResponse) {
-                let blob: Blob;
-
-                if (photoResponse instanceof Blob) {
-                    blob = photoResponse;
-                } else if (photoResponse.body) {
-                    if (photoResponse.body instanceof Blob) {
-                        blob = photoResponse.body;
-                    } else {
-                        // Convert ArrayBuffer or other format to Blob
-                        blob = new Blob([photoResponse.body], { type: 'image/jpeg' });
-                    }
-                } else {
-                    // Try to convert the entire response to blob
-                    blob = new Blob([photoResponse], { type: 'image/jpeg' });
-                }
-
-                photoUrl = URL.createObjectURL(blob);
-                console.log('Photo loaded successfully for user:', userId, 'URL:', photoUrl);
+            let request;
+            if (nextLink) {
+                request = graphClient.api(nextLink.replace('https://graph.microsoft.com/v1.0', ''));
+            } else {
+                request = graphClient
+                    .api('/users')
+                    .select(
+                        'id,displayName,mail,mobilePhone,ipPhone,businessPhones,officeLocation,jobTitle,userPrincipalName,userType,accountEnabled,companyName'
+                    )
+                    .top(999);
             }
 
-            // Cache the photo (even if undefined) - this won't trigger re-renders
-            setPhotoCache(prev => new Map(prev).set(userId, photoUrl));
+            const response = await request.get();
+            const newUsers = response.value || [];
+            const allUsers = [...users, ...newUsers];
 
-            return photoUrl;
-        } catch (err) {
-            console.log('Photo not available for user:', userId, err);
-            // Photo might not exist, cache undefined to avoid future requests
-            setPhotoCache(prev => new Map(prev).set(userId, undefined));
-            return undefined;
-        } finally {
-            setLoadingPhotos(prev => {
-                const newSet = new Set(prev);
-                newSet.delete(userId);
-                return newSet;
-            });
+            if (response['@odata.nextLink']) {
+                return await fetchAllUsers(graphClient, allUsers, response['@odata.nextLink']);
+            }
+
+            return allUsers;
+        } catch (error) {
+            console.error('Error fetching users batch:', error);
+            return users;
         }
     };
 
-    // Load photos for visible users (optimized to not cause re-renders)
-    // Batch load all images for current view and set at once to avoid flicker
-    const loadPhotosForVisibleUsers = useCallback(async (visibleUsers: IUserData[]) => {
-        const usersNeedingPhotos = visibleUsers.filter(user =>
-            !photoCache.has(user.userPrincipalName) &&
-            !loadingPhotos.has(user.userPrincipalName)
+    // Normalize phone number for searching (remove spaces, dashes, parentheses)
+    const normalizePhone = (phone: string): string => {
+        if (!phone) return '';
+        return phone.replace(/[\s\-\(\)\.]/g, '');
+    };
+
+    // Improved search function
+    const searchInData = (user: IUserData, searchTerm: string): boolean => {
+        if (!searchTerm.trim()) return true;
+        
+        const term = searchTerm.toLowerCase().trim();
+        const normalizedSearchTerm = normalizePhone(term);
+        
+        // Search in text fields (case insensitive)
+        const textFields = [
+            user.displayName,
+            user.mail,
+            user.officeLocation,
+            user.jobTitle,
+            user.userPrincipalName
+        ];
+        
+        const textMatch = textFields.some(field => 
+            field?.toLowerCase().includes(term)
         );
-
-        if (usersNeedingPhotos.length === 0) return;
-
-        // Fetch all photos in parallel
-        const photoPromises = usersNeedingPhotos.map(async user => {
-            try {
-                const photoUrl = await fetchUserPhoto(user.userPrincipalName);
-                return [user.userPrincipalName, photoUrl] as [string, string | undefined];
-            } catch (error) {
-                console.error('Error loading photo for user:', user.userPrincipalName, error);
-                return [user.userPrincipalName, undefined] as [string, undefined];
-            }
+        
+        if (textMatch) return true;
+        
+        // Search in phone numbers (normalized)
+        const phoneFields = [
+            user.mobilePhone,
+            user.ipPhone,
+            ...(user.businessPhones || [])
+        ];
+        
+        const phoneMatch = phoneFields.some(phone => {
+            if (!phone) return false;
+            const normalizedPhone = normalizePhone(phone.toString());
+            return normalizedPhone.includes(normalizedSearchTerm) || 
+                   phone.toString().toLowerCase().includes(term);
         });
+        
+        return phoneMatch;
+    };
 
-        const photoResults = await Promise.all(photoPromises);
-        // Update photoCache in one go
-        setPhotoCache(prev => {
-            const newCache = new Map(prev);
-            photoResults.forEach(([userId, photoUrl]) => {
-                newCache.set(userId, photoUrl);
+    // Fetch users from Microsoft Graph
+    const fetchUsers = useCallback(async () => {
+        if (!graphClient) return;
+
+        setLoading(true);
+        setError('');
+
+        try {
+            // Clear photo cache when refreshing data
+            photoCache.clear();
+            
+            let usersData = await fetchAllUsers(graphClient);
+
+            usersData = usersData.filter(user => {
+                // 1. Only company contains "Vaughn"
+                if (user.companyName && !user.companyName.toLowerCase().includes('vaughn')) {
+                    return false;
+                }
+
+                // 2. Exclude Disabled accounts
+                if (user.accountEnabled === false) {
+                    return false;
+                }
+
+                // 3. Exclude Guest users
+                if (user.userType === 'Guest') {
+                    return false;
+                }
+
+                // 4. Exclude #EXT# (external)
+                if (user.userPrincipalName && user.userPrincipalName.includes('#EXT#')) {
+                    return false;
+                }
+
+                // 5. Exclude UPN or mail with underscores or test accounts
+                if ((user.mail && user.mail.includes('_')) || 
+                    (user.userPrincipalName && user.userPrincipalName.includes('_')) || 
+                    (user.userPrincipalName && user.userPrincipalName?.toLowerCase()?.includes('test'))) {
+                    return false;
+                }
+
+                // 6. Exclude job titles per AD filter
+                if (user?.jobTitle) {
+                    const jobTitleLower = user.jobTitle.toLowerCase();
+                    const excludedTitles = ['intern', 'construction work', 'layout', 'foreman', 'instrument', 'student'];
+                    const excludedExactTitles = ['carpenter', 'driver', 'craft worker', 'rod man'];
+                    
+                    if (excludedTitles.some(title => jobTitleLower.includes(title)) ||
+                        excludedExactTitles.includes(user.jobTitle.trim().toLowerCase())) {
+                        return false;
+                    }
+                }
+
+                // 7. Exclude system/service/admin accounts
+                if (user.userPrincipalName) {
+                    const upnLower = user.userPrincipalName.toLowerCase();
+                    if (upnLower.includes('service') || upnLower.includes('admin') || upnLower.includes('system')) {
+                        return false;
+                    }
+                }
+
+                // 8. Require valid email
+                if (!user.mail || user.mail.trim() === '') {
+                    return false;
+                }
+
+                // 9. Require jobTitle not empty
+                if (!user.jobTitle || user.jobTitle.trim() === '') {
+                    return false;
+                }
+
+                return true;
             });
-            return newCache;
-        });
-    }, [photoCache, loadingPhotos, fetchUserPhoto]);
 
-    // Fetch all users from Microsoft Graph (recursive to get all users)
-  const fetchAllUsers = async (
-  graphClient: MSGraphClientV3,
-  users: IUserData[] = [],
-  nextLink?: string
-): Promise<IUserData[]> => {
-  try {
-    let request;
-    if (nextLink) {
-      // Use the nextLink for pagination
-      request = graphClient.api(nextLink.replace('https://graph.microsoft.com/v1.0', ''));
-    } else {
-      // Initial request
-      request = graphClient
-        .api('/users')
-        .select(
-          'id,displayName,mail,mobilePhone,ipPhone,businessPhones,officeLocation,jobTitle,userPrincipalName,userType,accountEnabled,companyName'
-        )
-        .top(999); // Max per request
-    }
+            console.log(`Fetched ${usersData.length} filtered users from Azure AD`);
 
-    const response = await request.get();
-    const newUsers = response.value || [];
-    const allUsers = [...users, ...newUsers];
+            // Sort alphabetically by displayName
+            usersData = usersData.sort((a, b) => {
+                const nameA = (a.displayName || '').toLowerCase();
+                const nameB = (b.displayName || '').toLowerCase();
+                return sortAscending ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+            });
 
-    // If there's a nextLink, recursively fetch more users
-    if (response['@odata.nextLink']) {
-      return await fetchAllUsers(graphClient, allUsers, response['@odata.nextLink']);
-    }
-
-    return allUsers;
-  } catch (error) {
-    console.error('Error fetching users batch:', error);
-    return users; // Return what we have so far
-  }
-};
-
-// Fetch users from Microsoft Graph
-const fetchUsers = useCallback(async () => {
-  if (!graphClient) return;
-
-  setLoading(true);
-  setError('');
-
-  try {
-    // Fetch all users using recursive pagination
-    let usersData = await fetchAllUsers(graphClient);
-
-    usersData = usersData.filter(user => {
-      // 1. Only company contains "Vaughn"
-      if (user.companyName && !user.companyName.toLowerCase().includes('vaughn')) {
-        return false;
-      }
-
-      // 2. Exclude Disabled accounts → check accountEnabled
-      if (user.accountEnabled === false) {
-        return false;
-      }
-
-      // 3. Exclude Guest users
-      if (user.userType === 'Guest') {
-        return false;
-      }
-
-      // 4. Exclude #EXT# (external)
-      if (user.userPrincipalName && user.userPrincipalName.includes('#EXT#')) {
-        return false;
-      }
-
-      // 5. Exclude UPN or mail with underscores
-      if ((user.mail && user.mail.includes('_')) || (user.userPrincipalName && user.userPrincipalName.includes('_'))) {
-        return false;
-      }
-
-      // 6. Exclude job titles per AD filter
-      if (
-        user?.jobTitle &&
-        (
-          user.jobTitle.toLowerCase().includes('intern') ||
-          user.jobTitle.toLowerCase().includes('construction work') ||
-          user.jobTitle.toLowerCase().includes('layout') ||
-          user.jobTitle.toLowerCase().includes('foreman') ||
-          user.jobTitle.toLowerCase().includes('instrument') ||
-          user.jobTitle.toLowerCase().includes('student') ||
-          ['carpenter', 'driver', 'craft worker', 'rod man'].includes(user.jobTitle.trim())
-        )
-      ) {
-        return false;
-      }
-
-      // 7. Exclude system/service/admin accounts
-      if (
-        user.userPrincipalName &&
-        (user.userPrincipalName.toLowerCase().includes('service') ||
-          user.userPrincipalName.toLowerCase().includes('admin') ||
-          user.userPrincipalName.toLowerCase().includes('system'))
-      ) {
-        return false;
-      }
-
-      // 8. Require valid email
-      if (!user.mail || user.mail.trim() === '') {
-        return false;
-      }
-
-      // 9. Require jobTitle not empty
-      if (!user.jobTitle || user.jobTitle.trim() === '') {
-        return false;
-      }
-
-      return true;
-    });
-
-    console.log(`Fetched ${usersData.length} filtered users from Azure AD`);
-
-    // Sort alphabetically by displayName
-    usersData = usersData.sort((a, b) => {
-      const nameA = (a.displayName || '').toLowerCase();
-      const nameB = (b.displayName || '').toLowerCase();
-      return sortAscending ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
-    });
-
-    setUsers(usersData);
-  } catch (err) {
-    setError('Failed to fetch users from Azure AD');
-    console.error('Error fetching users:', err);
-  } finally {
-    setLoading(false);
-  }
-}, [graphClient, sortAscending]);
-
+            setUsers(usersData);
+        } catch (err) {
+            setError('Failed to fetch users from Azure AD');
+            console.error('Error fetching users:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [graphClient, sortAscending]);
 
     // Fetch users when graph client is ready
     useEffect(() => {
@@ -318,7 +435,7 @@ const fetchUsers = useCallback(async () => {
         }
     }, [graphClient, fetchUsers]);
 
-    // Memoized filtered and sorted users (fixed to not reset pagination)
+    // Memoized filtered and sorted users with improved search
     const processedUsers = useMemo(() => {
         let result = [...users];
 
@@ -336,17 +453,9 @@ const fetchUsers = useCallback(async () => {
             );
         }
 
-        // Apply search filter
+        // Apply search filter with improved logic
         if (searchText.trim()) {
-            result = result.filter(user =>
-                user.displayName?.toLowerCase().includes(searchText.toLowerCase()) ||
-                user.mail?.toLowerCase().includes(searchText.toLowerCase()) ||
-                user.mobilePhone?.toLowerCase().includes(searchText.toLowerCase()) ||
-                user.businessPhones?.some(phone => phone.toLowerCase().includes(searchText.toLowerCase())) ||
-                user.officeLocation?.toLowerCase().includes(searchText.toLowerCase()) ||
-                user.jobTitle?.toLowerCase().includes(searchText.toLowerCase()) ||
-                user.userPrincipalName?.toLowerCase().includes(searchText.toLowerCase())
-            );
+            result = result.filter(user => searchInData(user, searchText));
         }
 
         return result;
@@ -400,13 +509,6 @@ const fetchUsers = useCallback(async () => {
         setCurrentPageUsers(pageUsers);
     }, [filteredUsers, currentPage, itemsPerPage]);
 
-    // Load photos for current page users (moved after currentPageUsers is set)
-    useEffect(() => {
-        if (currentPageUsers.length > 0 && !loading) {
-            loadPhotosForVisibleUsers(currentPageUsers);
-        }
-    }, [currentPageUsers, loading, loadPhotosForVisibleUsers]);
-
     // Handle page change
     const handlePageChange = (page: number) => {
         if (page >= 1 && page <= totalPages) {
@@ -430,7 +532,18 @@ const fetchUsers = useCallback(async () => {
         }
     };
 
-    // Define table columns
+    // Improved phone number display
+    const formatPhoneNumber = (phone: string): string => {
+        if (!phone) return '';
+        // Basic formatting - you can enhance this based on your phone number format requirements
+        const cleaned = phone.replace(/\D/g, '');
+        if (cleaned.length === 10) {
+            return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+        }
+        return phone; // Return as-is if not standard format
+    };
+
+    // Define table columns with improved phone rendering
     const columns: IColumn[] = [
         {
             key: 'photo',
@@ -439,15 +552,14 @@ const fetchUsers = useCallback(async () => {
             minWidth: 60,
             maxWidth: 60,
             onRender: (item: IUserData) => {
-                const photoUrl = photoCache.get(item.userPrincipalName) || item.photo;
+                // Use mail as primary identifier, fallback to userPrincipalName
+                const userIdentifier = item.mail || item.userPrincipalName;
                 return (
-                    <Persona
-                        size={PersonaSize.size40}
-                        imageUrl={photoUrl}
-                        text={item.displayName}
-                        presence={PersonaPresence.none}
-                        hidePersonaDetails={true}
-                        imageInitials={item.displayName ? item.displayName.split(' ').map(n => n[0]).join('').substring(0, 2) : '??'}
+                    <LivePersonaCard
+                        serviceScope={context?.serviceScope}
+                        userEmail={userIdentifier}
+                        displayName={item.displayName}
+                        graphClient={graphClient ?? undefined}
                     />
                 );
             },
@@ -473,7 +585,9 @@ const fetchUsers = useCallback(async () => {
             maxWidth: 150,
             isResizable: true,
             onRender: (item: IUserData) => (
-                <Text variant="medium">{item.mobilePhone}</Text>
+                <Text variant="medium">
+                    {item.mobilePhone ? formatPhoneNumber(item.mobilePhone) : ''}
+                </Text>
             ),
         },
         {
@@ -485,7 +599,9 @@ const fetchUsers = useCallback(async () => {
             isResizable: true,
             onRender: (item: IUserData) => (
                 <Text variant="medium">
-                    {item.businessPhones && item.businessPhones.length > 0 && item.businessPhones[0] }
+                    {item.businessPhones && item.businessPhones.length > 0 && item.businessPhones[0]
+                        ? formatPhoneNumber(item.businessPhones[0])
+                        : ''}
                 </Text>
             ),
         },
@@ -497,7 +613,7 @@ const fetchUsers = useCallback(async () => {
             maxWidth: 120,
             isResizable: true,
             onRender: (item: IUserData) => {
-                return <Text variant="medium">{item?.ipPhone}</Text>;
+                return <Text variant="medium">{item?.ipPhone || ''}</Text>;
             },
         },
         {
@@ -525,7 +641,7 @@ const fetchUsers = useCallback(async () => {
             maxWidth: 150,
             isResizable: true,
             onRender: (item: IUserData) => (
-                <Text variant="medium">{item.officeLocation}</Text>
+                <Text variant="medium">{item.officeLocation || ''}</Text>
             ),
         },
         {
@@ -536,7 +652,7 @@ const fetchUsers = useCallback(async () => {
             maxWidth: 200,
             isResizable: true,
             onRender: (item: IUserData) => (
-                <Text variant="medium">{item.jobTitle}</Text>
+                <Text variant="medium">{item.jobTitle || ''}</Text>
             ),
         },
     ];
@@ -548,8 +664,6 @@ const fetchUsers = useCallback(async () => {
             text: 'Refresh',
             iconProps: { iconName: 'Refresh' },
             onClick: () => {
-                // Clear photo cache on refresh
-                setPhotoCache(new Map());
                 fetchUsers();
             },
             disabled: loading,
