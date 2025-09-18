@@ -65,6 +65,14 @@
           "manifest": "./src/webparts/peopleLibrary/PeopleLibraryWebPart.manifest.json"
         }
       ]
+    },
+    "corporate-responsibilities-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/corporateResponsibilities/CorporateResponsibilitiesWebPart.js",
+          "manifest": "./src/webparts/corporateResponsibilities/CorporateResponsibilitiesWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},
@@ -77,6 +85,7 @@
     "ConsolidatedCalendarWebPartStrings": "lib/webparts/consolidatedCalendar/loc/{locale}.js",
     "WeeklyWordsWebPartStrings": "lib/webparts/weeklyWords/loc/{locale}.js",
     "SharepointFeedbackFormWebPartStrings": "lib/webparts/sharepointFeedbackForm/loc/{locale}.js",
-    "PeopleLibraryWebPartStrings": "lib/webparts/peopleLibrary/loc/{locale}.js"
+    "PeopleLibraryWebPartStrings": "lib/webparts/peopleLibrary/loc/{locale}.js",
+    "CorporateResponsibilitiesWebPartStrings": "lib/webparts/corporateResponsibilities/loc/{locale}.js"
   }
 }
