@@ -1,92 +1,148 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { DetailsList, IColumn, DetailsListLayoutMode, SelectionMode } from '@fluentui/react/lib/DetailsList';
-import { ShimmeredDetailsList } from '@fluentui/react/lib/ShimmeredDetailsList';
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHeaderCell,
+  TableBody,
+  TableCell,
+  TableCellLayout,
+  useTableFeatures,
+  TableColumnDefinition,
+  TableColumnId,
+  useTableSort,
+  createTableColumn,
+} from '@fluentui/react-components';
 
 // Define the props for our component
 export interface ISortableDetailsListProps {
   items: any[]; // The data to display
-  columns: IColumn[]; // The column configuration
+  columns: Array<{
+    key: string;
+    name: string;
+    fieldName: string;
+    minWidth?: number;
+    maxWidth?: number;
+    isResizable?: boolean;
+    isSorted?: boolean;
+    isSortedDescending?: boolean;
+  }>; // Column configuration
   isLoading?: boolean; // Optional flag for showing a loading shimmer
   maxHeight?: string; // Optional max height, defaults to calculated height
-  rowHeight?: number; // Height of each row (default: 42px for Fluent UI)
-  headerHeight?: number; // Height of header (default: 32px for Fluent UI)
+  rowHeight?: number; // Height of each row (default: 42px)
+  headerHeight?: number; // Height of header (default: 32px)
 }
 
 export const SortableDetailsList: React.FunctionComponent<ISortableDetailsListProps> = (props) => {
-  // State to hold the items and columns
-  const [items, setItems] = useState<any[]>(props.items);
-  const [columns, setColumns] = useState<IColumn[]>(props.columns);
   const [calculatedHeight, setCalculatedHeight] = useState<string>('400px');
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const rowHeight = props.rowHeight || 42; // Default Fluent UI row height
-  const headerHeight = props.headerHeight || 32; // Default Fluent UI header height
-
-  // This effect updates the items when the props change
-  useEffect(() => {
-    setItems(props.items);
-  }, [props.items]);
+  const rowHeight = props.rowHeight || 42;
+  const headerHeight = props.headerHeight || 48; // Fluent UI v9 header is taller
 
   // Calculate optimal table height based on content
   useEffect(() => {
-    if (items.length > 0 && !props.maxHeight) {
-      // Calculate height needed for all rows plus header
-      const contentHeight = (items.length * rowHeight) + headerHeight;
-      
-      // Get available viewport height
+    if (props.items.length > 0 && !props.maxHeight) {
+      const contentHeight = (props.items.length * rowHeight) + headerHeight + 20;
       const availableHeight = window.innerHeight;
-      
-      // Reserve space for other page elements (adjust as needed)
       const reservedSpace = 200;
       const maxAllowedHeight = availableHeight - reservedSpace;
-      
-      // Use the smaller of content height or max allowed height
       const optimalHeight = Math.min(contentHeight, maxAllowedHeight);
-      
-      // Ensure minimum height
-      const finalHeight = Math.max(optimalHeight, 200);
+      const finalHeight = Math.max(optimalHeight, 300);
       
       setCalculatedHeight(`${finalHeight}px`);
     }
-  }, [items.length, props.maxHeight, rowHeight, headerHeight]);
+  }, [props.items.length, props.maxHeight, rowHeight, headerHeight]);
 
-  // Add CSS for sticky header globally
+  // Add CSS for sticky header and scrolling
   useEffect(() => {
-    const styleId = 'sticky-header-fix';
+    const styleId = 'fluent-table-styles';
     let existingStyle = document.getElementById(styleId);
     
     if (!existingStyle) {
       const style = document.createElement('style');
       style.id = styleId;
       style.innerHTML = `
-        .sticky-table-container .ms-DetailsList-headerWrapper {
-          position: sticky !important;
-          top: 0 !important;
-          z-index: 200 !important;
-          background-color: #faf9f8 !important;
-          border-bottom: 1px solid #edebe9 !important;
-          box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+        .scrollable-table-container {
+          border: 1px solid var(--colorNeutralStroke2);
+          border-radius: var(--borderRadiusMedium);
+          background-color: var(--colorNeutralBackground1);
+          position: relative;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
         }
-        
-        .sticky-table-container .ms-DetailsList-contentWrapper {
-          overflow-x: hidden !important;
-          overflow-y: auto !important;
+
+        .scrollable-table-container .fui-Table {
+          height: 100%;
+          display: flex;
+          flex-direction: column;
         }
-        
-        .sticky-table-container .ms-DetailsHeader {
-          background-color: #faf9f8 !important;
+
+        .scrollable-table-container .fui-TableHeader {
+          flex-shrink: 0;
+          position: sticky;
+          top: 0;
+          z-index: 100;
+          background-color: var(--colorNeutralBackground2);
+          border-bottom: 1px solid var(--colorNeutralStroke2);
+          box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
-        
-        .sticky-table-container .ms-DetailsHeader-cell {
-          background-color: #faf9f8 !important;
+
+        .scrollable-table-container .fui-TableBody {
+          flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+        }
+
+        .scrollable-table-container .fui-TableRow {
+          border-bottom: 1px solid var(--colorNeutralStroke3);
+        }
+
+        .scrollable-table-container .fui-TableRow:hover {
+          background-color: var(--colorSubtleBackgroundHover);
+        }
+
+        /* Loading overlay */
+        .table-loading-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(255, 255, 255, 0.8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 200;
+          font-size: 16px;
+          color: var(--colorNeutralForeground1);
+        }
+
+        /* Custom scrollbar */
+        .scrollable-table-container .fui-TableBody::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .scrollable-table-container .fui-TableBody::-webkit-scrollbar-track {
+          background: var(--colorNeutralBackground3);
+          border-radius: 4px;
+        }
+
+        .scrollable-table-container .fui-TableBody::-webkit-scrollbar-thumb {
+          background: var(--colorNeutralStroke1);
+          border-radius: 4px;
+        }
+
+        .scrollable-table-container .fui-TableBody::-webkit-scrollbar-thumb:hover {
+          background: var(--colorNeutralStroke2);
         }
       `;
       document.head.appendChild(style);
     }
 
     return () => {
-      // Cleanup on unmount
       const styleElement = document.getElementById(styleId);
       if (styleElement) {
         styleElement.remove();
@@ -94,84 +150,128 @@ export const SortableDetailsList: React.FunctionComponent<ISortableDetailsListPr
     };
   }, []);
 
-  // The core sorting logic
-  const onColumnClick = (ev: React.MouseEvent<HTMLElement>, column: IColumn): void => {
-    const newColumns: IColumn[] = columns.slice();
-    const currColumn: IColumn = newColumns.filter(currCol => column.key === currCol.key)[0];
-    
-    // Toggle the sort direction or set it to ascending if it's a new column
-    const newSortDirection = currColumn.isSortedDescending ? false : true;
+  // Convert props.columns to Fluent UI v9 column definitions
+  const tableColumns: TableColumnDefinition<any>[] = props.columns.map(col => 
+    createTableColumn<any>({
+      columnId: col.key,
+      compare: (a, b) => {
+        const aVal = a[col.fieldName];
+        const bVal = b[col.fieldName];
+        
+        // Handle null/undefined values
+        if (aVal == null && bVal == null) return 0;
+        if (aVal == null) return -1;
+        if (bVal == null) return 1;
+        
+        // Convert to strings for comparison
+        const aStr = String(aVal).toLowerCase();
+        const bStr = String(bVal).toLowerCase();
+        
+        return aStr.localeCompare(bStr);
+      },
+    })
+  );
 
-    // Update the sorted column properties
-    const sortedColumns = newColumns.map(col => {
-      col.isSorted = (col.key === column.key);
-      if (col.isSorted) {
-        col.isSortedDescending = newSortDirection;
-      }
-      return col;
-    });
+  const {
+    getRows,
+    sort: { getSortDirection, toggleColumnSort, sort },
+  } = useTableFeatures(
+    {
+      columns: tableColumns,
+      items: props.items,
+    },
+    [
+      useTableSort({
+        defaultSortState: props.columns.find(col => col.isSorted) 
+          ? { 
+              sortColumn: props.columns.find(col => col.isSorted)!.key, 
+              sortDirection: props.columns.find(col => col.isSorted)!.isSortedDescending ? "descending" : "ascending" 
+            }
+          : undefined,
+      }),
+    ]
+  );
 
-    // Sort the items array
-    const sortedItems = [...items].sort((a, b) => {
-      const firstValue = a[column.fieldName!];
-      const secondValue = b[column.fieldName!];
-      
-      // Handle null/undefined values
-      if (firstValue == null && secondValue == null) return 0;
-      if (firstValue == null) return newSortDirection ? 1 : -1;
-      if (secondValue == null) return newSortDirection ? -1 : 1;
-      
-      // Convert to strings for comparison to handle mixed data types
-      const firstStr = String(firstValue).toLowerCase();
-      const secondStr = String(secondValue).toLowerCase();
-      
-      if (newSortDirection) { // Ascending
-        return firstStr > secondStr ? 1 : firstStr < secondStr ? -1 : 0;
-      } else { // Descending
-        return firstStr < secondStr ? 1 : firstStr > secondStr ? -1 : 0;
-      }
-    });
+  const headerSortProps = (columnId: TableColumnId) => ({
+    onClick: (e: React.MouseEvent) => {
+      toggleColumnSort(e, columnId);
+    },
+    sortDirection: getSortDirection(columnId),
+  });
 
-    // Update the state with the new sorted columns and items
-    setColumns(sortedColumns);
-    setItems(sortedItems);
-  };
+  const rows = sort(getRows());
+  const containerHeight = props.maxHeight || calculatedHeight;
 
-  const tableContainerStyle: React.CSSProperties = {
-    height: props.maxHeight || calculatedHeight,
-    border: '1px solid #edebe9',
-    borderRadius: '2px',
-    backgroundColor: '#ffffff',
-    overflow: 'hidden',
-    position: 'relative'
-  };
+const renderCellContent = (item: any, fieldName: string, column: any) => {
+  // If column has custom renderer, use it
+  if (column.onRender) {
+    return column.onRender(item);
+  }
+
+  const value = item[fieldName];
+
+  if (React.isValidElement(value)) return value;
+  if (value == null) return '';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'number') return value.toLocaleString();
+
+  return String(value);
+};
+
+
 
   return (
     <div 
       ref={containerRef} 
-      className="sticky-table-container"
-      style={tableContainerStyle}
+      className="scrollable-table-container"
+      style={{ 
+        height: containerHeight,
+        width: '100%'
+      }}
     >
-      <ShimmeredDetailsList
-        items={items}
-        columns={columns.map(col => ({ ...col, onColumnClick: onColumnClick }))}
-        setKey="set"
-        layoutMode={DetailsListLayoutMode.justified}
-        selectionMode={SelectionMode.none}
-        enableShimmer={props.isLoading}
-        compact={false}
-        detailsListStyles={{
-          root: {
-            height: '100%',
-            overflow: 'hidden'
-          },
-          contentWrapper: {
-            height: '100%',
-            overflowX: 'hidden',
-            overflowY: 'auto'
-          }
-        }}
-      />
+      <Table 
+        sortable 
+        aria-label="Sortable table with scrolling"
+        style={{ height: '100%' }}
+      >
+        <TableHeader>
+          <TableRow>
+            {props.columns.map((column) => (
+              <TableHeaderCell 
+                key={column.key}
+                {...headerSortProps(column.key)}
+                style={{
+                  minWidth: column.minWidth,
+                  maxWidth: column.maxWidth,
+                  width: column.maxWidth || column.minWidth
+                }}
+              >
+                {column.name}
+              </TableHeaderCell>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map(({ item }, index) => (
+            <TableRow key={`row-${index}`}>
+             {props.columns.map((column) => (
+  <TableCell key={`${index}-${column.key}`} style={{ minWidth: column.minWidth, maxWidth: column.maxWidth ,width: column.maxWidth || column.minWidth}}>
+    <TableCellLayout>
+      {renderCellContent(item, column.fieldName, column)}
+    </TableCellLayout>
+  </TableCell>
+))}
+
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      
+      {props.isLoading && (
+        <div className="table-loading-overlay">
+          Loading...
+        </div>
+      )}
     </div>
   );
 };

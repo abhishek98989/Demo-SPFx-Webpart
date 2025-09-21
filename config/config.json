@@ -73,6 +73,14 @@
           "manifest": "./src/webparts/corporateResponsibilities/CorporateResponsibilitiesWebPart.manifest.json"
         }
       ]
+    },
+    "locations-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/locations/LocationsWebPart.js",
+          "manifest": "./src/webparts/locations/LocationsWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},
@@ -86,6 +94,7 @@
     "WeeklyWordsWebPartStrings": "lib/webparts/weeklyWords/loc/{locale}.js",
     "SharepointFeedbackFormWebPartStrings": "lib/webparts/sharepointFeedbackForm/loc/{locale}.js",
     "PeopleLibraryWebPartStrings": "lib/webparts/peopleLibrary/loc/{locale}.js",
-    "CorporateResponsibilitiesWebPartStrings": "lib/webparts/corporateResponsibilities/loc/{locale}.js"
+    "CorporateResponsibilitiesWebPartStrings": "lib/webparts/corporateResponsibilities/loc/{locale}.js",
+    "LocationsWebPartStrings": "lib/webparts/locations/loc/{locale}.js"
   }
 }
