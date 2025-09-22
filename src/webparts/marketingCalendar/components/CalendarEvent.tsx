@@ -1,5 +1,3 @@
-
-
 // Updated ModernCalendar.tsx with permission handling
 import * as React from 'react';
 import { useState, useEffect } from 'react';
@@ -18,7 +16,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import EventForm from './EventForm';
 import moment from 'moment';
 import { useGlobalLoaderContext } from '../../../globalCommon/customLoader';
-
+import "@pnp/sp/security";
 export interface ICalendarEvent {
   id: string;
   title: string;
@@ -68,7 +66,7 @@ export default function ModernCalendar(props: any) {
     canAdd: false,
     canEdit: false,
     canDelete: false,
-    canView: false
+    canView: true
   });
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
@@ -81,17 +79,60 @@ export default function ModernCalendar(props: any) {
 
   // Check user permissions for the list
   const checkUserPermissions = async (): Promise<void> => {
+    if (!props?.MarketingCalendarId) {
+      console.warn('No MarketingCalendarId provided for permission check');
+      hideLoader();
+      return;
+    }
+
     try {
       // Get current user
       const currentUser = await sp.web.currentUser();
       setCurrentUserId(currentUser.Id);
 
-      // Get user's effective permissions on the list
-      const userPerms = await sp.web.lists.getById(props.MarketingCalendarId)
-        .getUserEffectivePermissions(currentUser.LoginName);
+      const list = sp.web.lists.getById(props.MarketingCalendarId);
 
-      // Check specific permissions
+      // Try multiple ways to get effective permissions, with retries and fallbacks
+      let userPerms: any = null;
+      const maxAttempts = 3;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          // Preferred: current user's effective permissions on the list (no args)
+          userPerms = await list.getCurrentUserEffectivePermissions();
+          if (userPerms) break;
+        } catch (err) {
+          // fallback - try with LoginName
+          try {
+            if (currentUser && currentUser.LoginName) {
+              userPerms = await list.getUserEffectivePermissions(currentUser.LoginName);
+              if (userPerms) break;
+            }
+          } catch (err2) {
+            // fallback - try with numeric id
+              try {
+              if (currentUser && currentUser.Id) {
+                userPerms = await list.getUserEffectivePermissions(String(currentUser.Id));
+                if (userPerms) break;
+              }
+            } catch (err3) {
+              // swallow and retry
+            }
+          }
+        }
 
+        // small backoff before retrying
+        await new Promise(res => setTimeout(res, 200 * attempt));
+      }
+
+      if (!userPerms) {
+        // Could not determine permissions
+        console.warn('Unable to determine user permissions for list after retries');
+        setUserPermissions({ canAdd: false, canEdit: false, canDelete: false, canView: true });
+        hideLoader();
+        return;
+      }
+
+      // Evaluate specific permissions using PnP helper
       const permissions = {
         canView: sp.web.hasPermissions(userPerms, PermissionKind.ViewListItems),
         canAdd: sp.web.hasPermissions(userPerms, PermissionKind.AddListItems),
@@ -102,7 +143,7 @@ export default function ModernCalendar(props: any) {
       setUserPermissions(permissions);
 
       if (permissions.canView) {
-        loadEvents();
+        await loadEvents();
       } else {
         hideLoader();
         console.warn('User does not have permission to view this calendar');
@@ -110,14 +151,9 @@ export default function ModernCalendar(props: any) {
     } catch (error) {
       hideLoader();
       console.error('Error checking user permissions:', error);
-      // Default to view-only if permission check fails
-      setUserPermissions({
-        canAdd: false,
-        canEdit: false,
-        canDelete: false,
-        canView: false
-      });
-      loadEvents();
+      // Default to no permissions if the check fails
+      setUserPermissions({ canAdd: false, canEdit: false, canDelete: false, canView: true });
+      // Do not attempt to load events if permissions are unknown or denied.
     }
   };
 
