@@ -58,7 +58,7 @@ const CorporateResponsibilitiesTable = (props: any) => {
     isSortedDescending: false,
     // add custom renderer
     onRender: (item: any) => (
-      <a
+      <>{canEdit? <a
         target="_blank"
         href={`https://vaughnconstruction.sharepoint.com/Lists/WhoDoesWhat/DispForm.aspx?ID=${item.Id}`}
         data-interception="off"
@@ -71,7 +71,9 @@ const CorporateResponsibilitiesTable = (props: any) => {
         onMouseOut={(e) => (e.target as HTMLElement).style.textDecoration = 'none'}
       >
         {item.Title}
-      </a>
+      </a> : <span style={{fontSize: '14px'}}>{item.Title}</span>}
+     
+      </>
     )
   },
   {
