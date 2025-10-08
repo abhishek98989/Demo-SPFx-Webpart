@@ -81,6 +81,14 @@
           "manifest": "./src/webparts/locations/LocationsWebPart.manifest.json"
         }
       ]
+    },
+    "resource-library-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/resourceLibrary/ResourceLibraryWebPart.js",
+          "manifest": "./src/webparts/resourceLibrary/ResourceLibraryWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},
@@ -95,6 +103,7 @@
     "SharepointFeedbackFormWebPartStrings": "lib/webparts/sharepointFeedbackForm/loc/{locale}.js",
     "PeopleLibraryWebPartStrings": "lib/webparts/peopleLibrary/loc/{locale}.js",
     "CorporateResponsibilitiesWebPartStrings": "lib/webparts/corporateResponsibilities/loc/{locale}.js",
-    "LocationsWebPartStrings": "lib/webparts/locations/loc/{locale}.js"
+    "LocationsWebPartStrings": "lib/webparts/locations/loc/{locale}.js",
+    "ResourceLibraryWebPartStrings": "lib/webparts/resourceLibrary/loc/{locale}.js"
   }
 }

@@ -436,41 +436,8 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
     }, [graphClient, fetchUsers]);
 
     // Memoized filtered and sorted users with improved search
-    const processedUsers = useMemo(() => {
-        let result = [...users];
-
-        // Sort alphabetically
-        result = result.sort((a, b) => {
-            const nameA = (a.displayName || '').toLowerCase();
-            const nameB = (b.displayName || '').toLowerCase();
-            return sortAscending ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
-        });
-
-        // Apply alphabet filter
-        if (selectedAlphabet) {
-            result = result.filter(user =>
-                user.displayName?.toUpperCase().startsWith(selectedAlphabet)
-            );
-        }
-
-        // Apply search filter with improved logic
-        if (searchText.trim()) {
-            result = result.filter(user => searchInData(user, searchText));
-        }
-
-        return result;
-    }, [users, searchText, selectedAlphabet, sortAscending]);
 
     // Update filtered users and reset page only when filters change
-    useEffect(() => {
-        setFilteredUsers(processedUsers);
-        // Only reset to page 1 if we're currently beyond the available pages
-        const totalPages = Math.ceil(processedUsers.length / itemsPerPage);
-        if (currentPage > totalPages && totalPages > 0) {
-            setCurrentPage(1);
-            setPageInput('1');
-        }
-    }, [processedUsers, currentPage, itemsPerPage]);
 
     // Handle search (reset page when search changes)
     const handleSearch = (newValue?: string) => {
@@ -543,8 +510,8 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         return phone; // Return as-is if not standard format
     };
 
-    // Define table columns with improved phone rendering
-    const columns: IColumn[] = [
+    // Initial table columns with improved phone rendering
+    const initialColumns: IColumn[] = [
         {
             key: 'photo',
             name: '',
@@ -656,6 +623,96 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
             ),
         },
     ];
+
+    // Columns state (so we can toggle sort indicators) and sort state
+    const [columnsState, setColumnsState] = useState<IColumn[]>(() => initialColumns.map(c => ({ ...c, isSorted: false, isSortedDescending: false })));
+
+    const [sortState, setSortState] = useState<{ key: string | null; isSortedDescending: boolean }>({ key: 'displayName', isSortedDescending: false });
+
+    // Helper to extract a sortable value from an item given a fieldName
+    const getSortValue = (item: any, fieldName?: string) => {
+        if (!fieldName) return '';
+        const value = (item as any)[fieldName];
+        if (value == null) return '';
+        if (Array.isArray(value)) return value.length > 0 ? String(value[0]) : '';
+        if (typeof value === 'object') return JSON.stringify(value);
+        return String(value);
+    };
+
+    // Column click handler to toggle sorting
+    const onColumnClick = (ev: React.MouseEvent<HTMLElement>, column?: IColumn) => {
+        if (!column) return;
+
+        setColumnsState(prev => {
+            const newCols = prev.map(col => {
+                if (col.key === column.key) {
+                    // If already sorted, toggle direction; otherwise start ascending
+                    const newDesc = col.isSorted ? !col.isSortedDescending : false;
+                    return { ...col, isSorted: true, isSortedDescending: newDesc };
+                }
+                return { ...col, isSorted: false, isSortedDescending: false };
+            });
+
+            // Update the sortState based on newCols
+            const active = newCols.find(c => c.isSorted);
+            setSortState({ key: active ? active.key : null, isSortedDescending: active ? active.isSortedDescending || false : false });
+
+            return newCols;
+        });
+    };
+
+    // Make sure each column has the onColumnClick assigned (for initial render)
+    useEffect(() => {
+        setColumnsState(prev => prev.map(c => ({ ...c, onColumnClick })));
+    }, []);
+
+    // Memoized filtered and sorted users with improved search
+    const processedUsers = useMemo(() => {
+        let result = [...users];
+
+        // Determine active sort column and fieldName
+        const activeCol = sortState.key ? columnsState.find(c => c.key === sortState.key) : null;
+        const fieldToSort = activeCol?.fieldName || 'displayName';
+
+        // Sort using active column if available, otherwise fallback to displayName
+        result = result.sort((a, b) => {
+            const valA = getSortValue(a, fieldToSort).toLowerCase();
+            const valB = getSortValue(b, fieldToSort).toLowerCase();
+
+            if (valA === valB) return 0;
+            if (sortState.key) {
+                return sortState.isSortedDescending ? (valB > valA ? 1 : -1) : (valA > valB ? 1 : -1);
+            }
+
+            // If no column sort is active, use the global sortAscending on displayName
+            return sortAscending ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        });
+
+        // Apply alphabet filter
+        if (selectedAlphabet) {
+            result = result.filter(user =>
+                user.displayName?.toUpperCase().startsWith(selectedAlphabet)
+            );
+        }
+
+        // Apply search filter with improved logic
+        if (searchText.trim()) {
+            result = result.filter(user => searchInData(user, searchText));
+        }
+
+        return result;
+    }, [users, searchText, selectedAlphabet, sortAscending, sortState, columnsState]);
+
+    // Update filtered users and reset page only when filters change
+    useEffect(() => {
+        setFilteredUsers(processedUsers);
+        // Only reset to page 1 if we're currently beyond the available pages
+        const totalPages = Math.ceil(processedUsers.length / itemsPerPage);
+        if (currentPage > totalPages && totalPages > 0) {
+            setCurrentPage(1);
+            setPageInput('1');
+        }
+    }, [processedUsers, currentPage, itemsPerPage]);
 
     // Command bar items
     const commandBarItems: ICommandBarItemProps[] = [
@@ -772,7 +829,7 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                     <>
                         <DetailsList
                             items={currentPageUsers}
-                            columns={columns}
+                            columns={columnsState}
                             layoutMode={DetailsListLayoutMode.justified}
                             selectionMode={SelectionMode.none}
                             styles={{
