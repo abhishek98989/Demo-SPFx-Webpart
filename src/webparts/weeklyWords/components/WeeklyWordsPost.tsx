@@ -4,6 +4,7 @@ import { spfi, SPFx } from "@pnp/sp";
 import "@pnp/sp/webs";
 import "@pnp/sp/lists";
 import "@pnp/sp/items";
+import '../../../globalCommon/style.css';
 
 interface IArticleItem {
     Id: number;
@@ -146,86 +147,7 @@ export const WeeklyWordsPost: React.FC<IWeeklyWordsProps> = ({ listId, context, 
         color: '#666'
     };
 
-    const articleHeaderStyle: React.CSSProperties = {
-        marginBottom: '30px',
-        borderBottom: '2px solid #f3f2f1',
-        paddingBottom: '20px'
-    };
-
-    const titleStyle: React.CSSProperties = {
-        fontSize: '28px',
-        fontWeight: 600,
-        color: '#323130',
-        margin: '0 0 15px 0',
-        lineHeight: '1.3'
-    };
-
-    const metadataStyle: React.CSSProperties = {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '15px'
-    };
-
-    const publishInfoStyle: React.CSSProperties = {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px'
-    };
-
-    const dateTimeStyle: React.CSSProperties = {
-        color: '#605e5c',
-        fontSize: '14px',
-        fontWeight: 500
-    };
-
-    const authorStyle: React.CSSProperties = {
-        color: '#605e5c',
-        fontSize: '14px'
-    };
-
-    const statusBadgeStyle: React.CSSProperties = {
-        background: '#dff6dd',
-        color: '#107c10',
-        padding: '6px 12px',
-        borderRadius: '16px',
-        fontSize: '12px',
-        fontWeight: 600
-    };
-
-    const contentStyle: React.CSSProperties = {
-        fontSize: "16px",
-        color: "#323130",
-        marginBottom: "30px",
-        lineHeight: "1.6",
-        width: "100%",
-        maxWidth: "100%",
-        overflowWrap: "break-word",
-    };
-
-    const globalContentCSS = `
-  .article-content p { margin: 0 0 1em; }
-  .article-content h1, .article-content h2, .article-content h3 {
-    margin: 1em 0 0.5em;
-    font-weight: 600;
-    line-height: 1.3;
-  }
-  .article-content img {
-    max-width: 100%;
-    height: auto;
-    display: block;
-    margin: 1em auto;
-  }
-  .article-content table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .article-content table td, .article-content table th {
-    border: 1px solid #ddd;
-    padding: 8px;
-  }
-`;
+  
 
 
     const noPageContentStyle: React.CSSProperties = {
@@ -238,14 +160,7 @@ export const WeeklyWordsPost: React.FC<IWeeklyWordsProps> = ({ listId, context, 
         color: '#605e5c'
     };
 
-    const footerStyle: React.CSSProperties = {
-        textAlign: 'right',
-        paddingTop: '20px',
-        borderTop: '1px solid #f3f2f1',
-        color: '#a19f9d',
-        fontSize: '12px'
-    };
-
+  
     // Add CSS animation keyframes
     const spinKeyframes = `
     @keyframes spin {
@@ -318,13 +233,12 @@ export const WeeklyWordsPost: React.FC<IWeeklyWordsProps> = ({ listId, context, 
                     </span>
                     {date}
                 </div>
-                <style>{globalContentCSS}</style>
-                <div style={contentStyle}>
+                
+                <div>
                     {article.VaughnContent ? (
                         <div
                             dangerouslySetInnerHTML={{ __html: article.VaughnContent }}
                             style={{
-                                ...contentStyle,
                                 width: "100%",
                                 maxWidth: "100%",
                                 overflowWrap: "break-word",
