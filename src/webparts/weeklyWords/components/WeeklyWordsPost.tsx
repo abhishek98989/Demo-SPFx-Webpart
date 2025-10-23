@@ -4,8 +4,8 @@ import { spfi, SPFx } from "@pnp/sp";
 import "@pnp/sp/webs";
 import "@pnp/sp/lists";
 import "@pnp/sp/items";
-import '../../../globalCommon/style.css';
-
+import styles from './WeeklyWords.module.scss';
+import SharePointBanners from '../../../globalCommon/Banners';
 interface IArticleItem {
     Id: number;
     Title: string;
@@ -99,9 +99,10 @@ export const WeeklyWordsPost: React.FC<IWeeklyWordsProps> = ({ listId, context, 
     // Inline Styles
     const containerStyle: React.CSSProperties = {
         fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif',
-        maxWidth: '1000px',
+      
         margin: '0 auto',
         padding: '20px',
+        paddingTop: '0px'
     };
 
     const loadingStyle: React.CSSProperties = {
@@ -214,7 +215,9 @@ export const WeeklyWordsPost: React.FC<IWeeklyWordsProps> = ({ listId, context, 
     const { date, time } = formatDateTime(article.ArticleDate);
 
     return (
-        <div style={containerStyle}>
+        <>
+        <SharePointBanners context={context}/>
+         <div style={containerStyle} className='WeeklyWordsPost'>
             <h2 style={{ textAlign: "justify" }} className="ms-webpart-titleText">
                 <span style={{ whiteSpace: "nowrap" }}>
                     <span>Weekly Words from Westpark</span>
@@ -255,6 +258,8 @@ export const WeeklyWordsPost: React.FC<IWeeklyWordsProps> = ({ listId, context, 
 
             </div>
         </div>
+        </>
+       
     );
 };
 

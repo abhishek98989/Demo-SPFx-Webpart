@@ -12,6 +12,8 @@
     "test": "gulp test"
   },
   "dependencies": {
+    "@ckeditor/ckeditor5-build-classic": "^41.4.2",
+    "@ckeditor/ckeditor5-react": "^6.3.0",
     "@fluentui/react": "^8.106.4",
     "@google/genai": "^0.12.0",
     "@google/generative-ai": "^0.24.1",
@@ -24,6 +26,9 @@
     "@microsoft/sp-webpart-base": "1.21.1",
     "@pnp/sp": "^4.12.0",
     "@pnp/spfx-controls-react": "^3.20.0",
+    "@tinymce/tinymce-react": "^6.3.0",
+    "@toast-ui/editor": "^3.2.2",
+    "@toast-ui/react-editor": "^3.2.3",
     "bootstrap": "^5.3.6",
     "dompurify": "^3.2.5",
     "jquery": "^3.7.1",
@@ -53,5 +58,11 @@
     "eslint-plugin-react-hooks": "4.3.0",
     "gulp": "4.0.2",
     "typescript": "4.7.4"
+  },
+  "overrides": {
+    "@ckeditor/ckeditor5-core": "41.4.2",
+    "@ckeditor/ckeditor5-watchdog": "41.4.2",
+    "@ckeditor/ckeditor5-utils": "41.4.2",
+    "@ckeditor/ckeditor5-engine": "41.4.2"
   }
 }

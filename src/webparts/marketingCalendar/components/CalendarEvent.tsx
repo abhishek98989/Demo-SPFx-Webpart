@@ -1459,25 +1459,19 @@ export default function ModernCalendar(props: any) {
   if (!userPermissions.canView) {
     return (
       <div className={'modernCalendar'}>
-        <div className={'container'}>
-          <div className={'row'}>
-            <div className={'column'}>
+       
               <h2>{props?.CalendarTitle}</h2>
               <div style={{ padding: '20px', textAlign: 'center' }}>
                 <p>You don't have permission to view this calendar.</p>
               </div>
-            </div>
-          </div>
-        </div>
+
       </div>
     );
   }
 
   return (
     <div className={'modernCalendar'}>
-      <div className={'container'}>
-        <div className={'row'}>
-          <div className={'column'}>
+     
             <h2>{props?.CalendarTitle}</h2>
             <div className={'calendarContainer'}>
               <Calendar
@@ -1499,9 +1493,7 @@ export default function ModernCalendar(props: any) {
                 views={['month', 'week', 'day', 'agenda']}
                 components={components}
               />
-            </div>
-          </div>
-        </div>
+            
       </div>
       {showModal && (
         <EventForm

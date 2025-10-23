@@ -89,6 +89,22 @@
           "manifest": "./src/webparts/resourceLibrary/ResourceLibraryWebPart.manifest.json"
         }
       ]
+    },
+    "weekly-words-management-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/weeklyWordsManagement/WeeklyWordsManagementWebPart.js",
+          "manifest": "./src/webparts/weeklyWordsManagement/WeeklyWordsManagementWebPart.manifest.json"
+        }
+      ]
+    },
+    "weekly-words-viewer-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/weeklyWordsViewer/WeeklyWordsViewerWebPart.js",
+          "manifest": "./src/webparts/weeklyWordsViewer/WeeklyWordsViewerWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},
@@ -104,6 +120,8 @@
     "PeopleLibraryWebPartStrings": "lib/webparts/peopleLibrary/loc/{locale}.js",
     "CorporateResponsibilitiesWebPartStrings": "lib/webparts/corporateResponsibilities/loc/{locale}.js",
     "LocationsWebPartStrings": "lib/webparts/locations/loc/{locale}.js",
-    "ResourceLibraryWebPartStrings": "lib/webparts/resourceLibrary/loc/{locale}.js"
+    "ResourceLibraryWebPartStrings": "lib/webparts/resourceLibrary/loc/{locale}.js",
+    "WeeklyWordsManagementWebPartStrings": "lib/webparts/weeklyWordsManagement/loc/{locale}.js",
+    "WeeklyWordsViewerWebPartStrings": "lib/webparts/weeklyWordsViewer/loc/{locale}.js"
   }
 }

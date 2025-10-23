@@ -27,7 +27,7 @@ import {
 } from '@fluentui/react';
 import { LivePersona } from '@pnp/spfx-controls-react/lib/LivePersona';
 import { ServiceScope } from '@microsoft/sp-core-library';
-import styles from './PeopleLibrary.module.scss';
+import styles from './PeopleLibrary.module.scss'; // Assuming this styles file exists
 
 // Interface for user data from Microsoft Graph
 interface IUserData {
@@ -236,7 +236,11 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [pageInput, setPageInput] = useState<string>('1');
     const [selectedAlphabet, setSelectedAlphabet] = useState<string>('');
+    
+    // **STATE FOR COLUMN SORTING**
+    const [sortedColumnKey, setSortedColumnKey] = useState<keyof IUserData | 'mobilePhone' | 'businessPhones' | 'ipPhone' | ''>('displayName');
     const [sortAscending, setSortAscending] = useState<boolean>(true);
+
     const [graphClient, setGraphClient] = useState<MSGraphClientV3 | null>(null);
 
     const itemsPerPage = 20;
@@ -336,6 +340,48 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         return phoneMatch;
     };
 
+    // **Sorting utility function**
+    const sortUsers = useCallback((
+        data: IUserData[],
+        columnKey: keyof IUserData | 'mobilePhone' | 'businessPhones' | 'ipPhone' | '',
+        isAscending: boolean
+    ): IUserData[] => {
+        if (!columnKey) return data;
+
+        const sortedData = [...data].sort((a, b) => {
+            let aValue: string | any;
+            let bValue: string | any;
+
+            // Special handling for phone fields
+            if (columnKey === 'businessPhones') {
+                aValue = a.businessPhones && a.businessPhones.length > 0 ? a.businessPhones[0] : '';
+                bValue = b.businessPhones && b.businessPhones.length > 0 ? b.businessPhones[0] : '';
+            } else if (columnKey === 'mobilePhone') {
+                aValue = a.mobilePhone || '';
+                bValue = b.mobilePhone || '';
+            } else if (columnKey === 'ipPhone') {
+                aValue = a.ipPhone || '';
+                bValue = b.ipPhone || '';
+            }
+            // General string sort for other fields
+            else {
+                aValue = a[columnKey as keyof IUserData] as string || '';
+                bValue = b[columnKey as keyof IUserData] as string || '';
+            }
+
+            // Type check for string comparison
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                const comparison = aValue.toLowerCase().localeCompare(bValue.toLowerCase());
+                return isAscending ? comparison : -comparison;
+            }
+
+            // Fallback for non-string or unknown types (treat as equivalent for sorting)
+            return 0;
+        });
+
+        return sortedData;
+    }, []);
+
     // Fetch users from Microsoft Graph
     const fetchUsers = useCallback(async () => {
         if (!graphClient) return;
@@ -412,21 +458,19 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
 
             console.log(`Fetched ${usersData.length} filtered users from Azure AD`);
 
-            // Sort alphabetically by displayName
-            usersData = usersData.sort((a, b) => {
-                const nameA = (a.displayName || '').toLowerCase();
-                const nameB = (b.displayName || '').toLowerCase();
-                return sortAscending ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
-            });
+            // Initial sort by displayName
+            usersData = sortUsers(usersData, 'displayName', true);
 
             setUsers(usersData);
+            setSortedColumnKey('displayName');
+            setSortAscending(true);
         } catch (err) {
             setError('Failed to fetch users from Azure AD');
             console.error('Error fetching users:', err);
         } finally {
             setLoading(false);
         }
-    }, [graphClient, sortAscending]);
+    }, [graphClient, sortUsers]);
 
     // Fetch users when graph client is ready
     useEffect(() => {
@@ -435,9 +479,39 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         }
     }, [graphClient, fetchUsers]);
 
-    // Memoized filtered and sorted users with improved search
+    // Memoized filtered and sorted users
+    const processedUsers = useMemo(() => {
+        let result = [...users];
+
+        // Apply alphabet filter
+        if (selectedAlphabet) {
+            result = result.filter(user =>
+                user.displayName?.toUpperCase().startsWith(selectedAlphabet)
+            );
+        }
+
+        // Apply search filter
+        if (searchText.trim()) {
+            result = result.filter(user => searchInData(user, searchText));
+        }
+
+        // Apply column sort
+        result = sortUsers(result, sortedColumnKey, sortAscending);
+
+        return result;
+    }, [users, searchText, selectedAlphabet, sortedColumnKey, sortAscending, sortUsers]);
 
     // Update filtered users and reset page only when filters change
+    useEffect(() => {
+        setFilteredUsers(processedUsers);
+        const totalPages = Math.ceil(processedUsers.length / itemsPerPage);
+        
+        // Reset to page 1 if current page is invalid or if filters/sort changed
+        if (currentPage > totalPages && totalPages > 0 || currentPage === 0) {
+            setCurrentPage(1);
+            setPageInput('1');
+        }
+    }, [processedUsers, currentPage, itemsPerPage]);
 
     // Handle search (reset page when search changes)
     const handleSearch = (newValue?: string) => {
@@ -458,11 +532,33 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         setPageInput('1');
     };
 
-    // Handle sort toggle
-    const handleSortToggle = () => {
-        setSortAscending(!sortAscending);
-        // Don't reset page when sorting
-    };
+    // **Handle column header click for sorting**
+    const onColumnClick = useCallback((
+        event: React.MouseEvent<HTMLElement>,
+        column: IColumn
+    ): void => {
+        // The column key should be one of the sortable field names
+        const columnKey = column.fieldName as keyof IUserData | 'mobilePhone' | 'businessPhones' | 'ipPhone' | '';
+        
+        let newSortAscending = sortAscending;
+        
+        // If the same column is clicked, toggle the sort direction
+        if (sortedColumnKey === columnKey) {
+            newSortAscending = !sortAscending;
+        } 
+        // If a new column is clicked, sort ascending by default
+        else {
+            newSortAscending = true;
+        }
+
+        setSortedColumnKey(columnKey);
+        setSortAscending(newSortAscending);
+
+        // Reset to the first page after sorting
+        setCurrentPage(1);
+        setPageInput('1');
+    }, [sortedColumnKey, sortAscending]);
+
 
     // Calculate pagination
     const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
@@ -502,24 +598,23 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
     // Improved phone number display
     const formatPhoneNumber = (phone: string): string => {
         if (!phone) return '';
-        // Basic formatting - you can enhance this based on your phone number format requirements
         const cleaned = phone.replace(/\D/g, '');
         if (cleaned.length === 10) {
             return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
         }
-        return phone; // Return as-is if not standard format
+        return phone;
     };
 
-    // Initial table columns with improved phone rendering
-    const initialColumns: IColumn[] = [
+    // Define table columns with sorting properties
+    const columns: IColumn[] = useMemo(() => [
         {
             key: 'photo',
             name: '',
             fieldName: 'photo',
             minWidth: 60,
             maxWidth: 60,
+            isPadded: true,
             onRender: (item: IUserData) => {
-                // Use mail as primary identifier, fallback to userPrincipalName
                 const userIdentifier = item.mail || item.userPrincipalName;
                 return (
                     <LivePersonaCard
@@ -538,6 +633,8 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
             minWidth: 150,
             maxWidth: 200,
             isResizable: true,
+            isSorted: sortedColumnKey === 'displayName',
+            isSortedDescending: !sortAscending,
             onRender: (item: IUserData) => (
                 <Text variant="medium" styles={{ root: { fontWeight: '600' } }}>
                     {item.displayName}
@@ -551,6 +648,8 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
             minWidth: 120,
             maxWidth: 150,
             isResizable: true,
+            isSorted: sortedColumnKey === 'mobilePhone',
+            isSortedDescending: !sortAscending,
             onRender: (item: IUserData) => (
                 <Text variant="medium">
                     {item.mobilePhone ? formatPhoneNumber(item.mobilePhone) : ''}
@@ -564,6 +663,8 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
             minWidth: 120,
             maxWidth: 150,
             isResizable: true,
+            isSorted: sortedColumnKey === 'businessPhones',
+            isSortedDescending: !sortAscending,
             onRender: (item: IUserData) => (
                 <Text variant="medium">
                     {item.businessPhones && item.businessPhones.length > 0 && item.businessPhones[0]
@@ -579,6 +680,8 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
             minWidth: 100,
             maxWidth: 120,
             isResizable: true,
+            isSorted: sortedColumnKey === 'ipPhone',
+            isSortedDescending: !sortAscending,
             onRender: (item: IUserData) => {
                 return <Text variant="medium">{item?.ipPhone || ''}</Text>;
             },
@@ -590,6 +693,8 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
             minWidth: 200,
             maxWidth: 250,
             isResizable: true,
+            isSorted: sortedColumnKey === 'mail',
+            isSortedDescending: !sortAscending,
             onRender: (item: IUserData) => (
                 <Text variant="medium">
                     {item.mail && (
@@ -607,6 +712,8 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
             minWidth: 120,
             maxWidth: 150,
             isResizable: true,
+            isSorted: sortedColumnKey === 'officeLocation',
+            isSortedDescending: !sortAscending,
             onRender: (item: IUserData) => (
                 <Text variant="medium">{item.officeLocation || ''}</Text>
             ),
@@ -618,101 +725,13 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
             minWidth: 150,
             maxWidth: 200,
             isResizable: true,
+            isSorted: sortedColumnKey === 'jobTitle',
+            isSortedDescending: !sortAscending,
             onRender: (item: IUserData) => (
                 <Text variant="medium">{item.jobTitle || ''}</Text>
             ),
         },
-    ];
-
-    // Columns state (so we can toggle sort indicators) and sort state
-    const [columnsState, setColumnsState] = useState<IColumn[]>(() => initialColumns.map(c => ({ ...c, isSorted: false, isSortedDescending: false })));
-
-    const [sortState, setSortState] = useState<{ key: string | null; isSortedDescending: boolean }>({ key: 'displayName', isSortedDescending: false });
-
-    // Helper to extract a sortable value from an item given a fieldName
-    const getSortValue = (item: any, fieldName?: string) => {
-        if (!fieldName) return '';
-        const value = (item as any)[fieldName];
-        if (value == null) return '';
-        if (Array.isArray(value)) return value.length > 0 ? String(value[0]) : '';
-        if (typeof value === 'object') return JSON.stringify(value);
-        return String(value);
-    };
-
-    // Column click handler to toggle sorting
-    const onColumnClick = (ev: React.MouseEvent<HTMLElement>, column?: IColumn) => {
-        if (!column) return;
-
-        setColumnsState(prev => {
-            const newCols = prev.map(col => {
-                if (col.key === column.key) {
-                    // If already sorted, toggle direction; otherwise start ascending
-                    const newDesc = col.isSorted ? !col.isSortedDescending : false;
-                    return { ...col, isSorted: true, isSortedDescending: newDesc };
-                }
-                return { ...col, isSorted: false, isSortedDescending: false };
-            });
-
-            // Update the sortState based on newCols
-            const active = newCols.find(c => c.isSorted);
-            setSortState({ key: active ? active.key : null, isSortedDescending: active ? active.isSortedDescending || false : false });
-
-            return newCols;
-        });
-    };
-
-    // Make sure each column has the onColumnClick assigned (for initial render)
-    useEffect(() => {
-        setColumnsState(prev => prev.map(c => ({ ...c, onColumnClick })));
-    }, []);
-
-    // Memoized filtered and sorted users with improved search
-    const processedUsers = useMemo(() => {
-        let result = [...users];
-
-        // Determine active sort column and fieldName
-        const activeCol = sortState.key ? columnsState.find(c => c.key === sortState.key) : null;
-        const fieldToSort = activeCol?.fieldName || 'displayName';
-
-        // Sort using active column if available, otherwise fallback to displayName
-        result = result.sort((a, b) => {
-            const valA = getSortValue(a, fieldToSort).toLowerCase();
-            const valB = getSortValue(b, fieldToSort).toLowerCase();
-
-            if (valA === valB) return 0;
-            if (sortState.key) {
-                return sortState.isSortedDescending ? (valB > valA ? 1 : -1) : (valA > valB ? 1 : -1);
-            }
-
-            // If no column sort is active, use the global sortAscending on displayName
-            return sortAscending ? valA.localeCompare(valB) : valB.localeCompare(valA);
-        });
-
-        // Apply alphabet filter
-        if (selectedAlphabet) {
-            result = result.filter(user =>
-                user.displayName?.toUpperCase().startsWith(selectedAlphabet)
-            );
-        }
-
-        // Apply search filter with improved logic
-        if (searchText.trim()) {
-            result = result.filter(user => searchInData(user, searchText));
-        }
-
-        return result;
-    }, [users, searchText, selectedAlphabet, sortAscending, sortState, columnsState]);
-
-    // Update filtered users and reset page only when filters change
-    useEffect(() => {
-        setFilteredUsers(processedUsers);
-        // Only reset to page 1 if we're currently beyond the available pages
-        const totalPages = Math.ceil(processedUsers.length / itemsPerPage);
-        if (currentPage > totalPages && totalPages > 0) {
-            setCurrentPage(1);
-            setPageInput('1');
-        }
-    }, [processedUsers, currentPage, itemsPerPage]);
+    ], [sortedColumnKey, sortAscending, context?.serviceScope, graphClient]);
 
     // Command bar items
     const commandBarItems: ICommandBarItemProps[] = [
@@ -746,14 +765,7 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                         onChange={(_, newValue) => handleSearch(newValue)}
                         styles={{ root: { maxWidth: '400px', flexGrow: 1 } }}
                     />
-
-                    <Toggle
-                        label="Sort A-Z"
-                        checked={sortAscending}
-                        onChange={handleSortToggle}
-                        onText="A-Z"
-                        offText="Z-A"
-                    />
+                    {/* The global A-Z toggle is removed to prefer column sorting */}
                 </Stack>
 
                 {/* Alphabet Filter */}
@@ -807,6 +819,7 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                     <Text variant="medium" styles={{ root: { color: '#666' } }}>
                         Showing {currentPageUsers.length} of {filteredUsers.length} users
                         {(searchText || selectedAlphabet) && ` (filtered from ${users.length} total)`}
+                        {sortedColumnKey && ` sorted by ${columns.find(c => c.key === sortedColumnKey)?.name} (${sortAscending ? 'A-Z' : 'Z-A'})`}
                     </Text>
                 )}
 
@@ -829,9 +842,10 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                     <>
                         <DetailsList
                             items={currentPageUsers}
-                            columns={columnsState}
+                            columns={columns}
                             layoutMode={DetailsListLayoutMode.justified}
                             selectionMode={SelectionMode.none}
+                            onColumnHeaderClick={onColumnClick} // **Column Sorting Hook**
                             styles={{
                                 root: {
                                     border: '1px solid #edebe9',

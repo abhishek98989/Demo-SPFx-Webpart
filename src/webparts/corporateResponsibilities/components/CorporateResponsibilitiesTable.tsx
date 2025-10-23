@@ -54,8 +54,8 @@ const CorporateResponsibilitiesTable = (props: any) => {
     fieldName: 'Title',
     minWidth: 400,
     isResizable: true,
-    isSorted: false,
-    isSortedDescending: false,
+    isSorted: true,
+    isSortedAcending: true,
     // add custom renderer
     onRender: (item: any) => (
       <>{canEdit? <a
