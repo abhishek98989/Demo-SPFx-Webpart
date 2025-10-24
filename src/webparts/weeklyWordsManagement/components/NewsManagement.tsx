@@ -7,6 +7,7 @@ import "@pnp/sp/lists";
 import "@pnp/sp/items";
 import "@pnp/sp/folders";
 import "@pnp/sp/files";
+import { DatePicker } from "@fluentui/react/lib/DatePicker";
 import {
     DetailsList,
     DetailsListLayoutMode,
@@ -81,6 +82,7 @@ interface IListItem {
   PublishingRollupImageUrl?: string;   // hyperlink URL
   Abstract?: string;                   // multiline
   InCaseYouMissed?: Array<{ Id: number; Title: string }>;
+  ArticleDate?: string; 
 }
 
 const NewsManager: React.FC<INewsManagerProps> = (props) => {
@@ -121,7 +123,8 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
   // ICYM
   const [icymOptions, setIcymOptions] = useState<Array<{ key: number; text: string }>>([]);
   const [icymSelected, setIcymSelected] = useState<number[]>([]);
-
+//Article Date 
+const [articleDate, setArticleDate] = useState<Date | null>(null);
   // Image picker
   const [imagePickerTarget, setImagePickerTarget] = useState<"editor" | "rollup">("editor");
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
@@ -207,7 +210,8 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
           "InCaseYouMissed/Title",
           "PublishingContact/Id",
           "PublishingContact/Title",
-          "PublishingContact/EMail"
+          "PublishingContact/EMail",
+          "ArticleDate"                  
         )
         .expand("InCaseYouMissed", "PublishingContact")
         .orderBy("Created", false)();
@@ -229,6 +233,7 @@ const mapped: IListItem[] = rows.map(r => ({
   PublishingSource: r.PublishingSource || undefined,
   PublishingRollupImageUrl: r.PublishingRollupImage ? (r.PublishingRollupImage.Url || r.PublishingRollupImage) : "",
   Abstract: r.Abstract || "",
+    ArticleDate: r.ArticleDate || undefined,
   InCaseYouMissed: Array.isArray(r.InCaseYouMissed) ? r.InCaseYouMissed.map((x: any) => ({ Id: x.Id, Title: x.Title })) : []
 }));
 
@@ -260,7 +265,7 @@ const mapped: IListItem[] = rows.map(r => ({
     setPublishingContactId(null);
     setPublishingContactEmail(undefined);
     setIcymSelected([]);
-
+ setArticleDate(null);
     setIsPanelOpen(true);
   }
 
@@ -269,7 +274,7 @@ const mapped: IListItem[] = rows.map(r => ({
     setTitle(item.Title);
     setDescriptionHtml(item.Description || "");
     setPublished(!!item.Published);
-
+ setArticleDate(item.ArticleDate ? new Date(item.ArticleDate) : null);
     // NEW fields populate
     setDepartment(item.Department);
     setPublishingSource(item.PublishingSource);
@@ -299,6 +304,7 @@ async function saveItem() {
       PublishingContactId: publishingContactId ?? null,
       Department: department || null,
       PublishingSource: publishingSource || null,
+       ArticleDate: articleDate ? articleDate : null
       // DO NOT try to set OData__ModerationStatus directly
     };
 
@@ -564,51 +570,63 @@ async function saveItem() {
     </div>
 
     {/* Publishing Contact, Department, and Publishing Source in one row */}
-    <Stack horizontal tokens={{ childrenGap: 12 }}>
-      <Stack.Item grow={1}>
-        <div>
-          <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>Publishing Contact</label>
-          <PeoplePicker
-            context={context}
-            personSelectionLimit={1}
-            principalTypes={[PrincipalType.User]}
-            ensureUser={true}
-            showHiddenInUI={false}
-            resolveDelay={300}
-            defaultSelectedUsers={publishingContactEmail ? [publishingContactEmail] : []}
-            onChange={(items: IPeoplePickerUserItem[]) => {
-              const first = items?.[0];
-              setPublishingContactId(first?.id ? Number(first.id) : null);
-              setPublishingContactEmail(first?.secondaryText);
-            }}
-            webAbsoluteUrl={siteUrl || context.pageContext.web.absoluteUrl}
-            key={`peoplePicker_${editingItem?.Id || 'new'}_${publishingContactEmail}`}
-          />
-        </div>
-      </Stack.Item>
+ <Stack horizontal tokens={{ childrenGap: 12 }}>
+  <Stack.Item grow={1}>
+    <div>
+      <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>Publishing Contact</label>
+      <PeoplePicker
+        context={context}
+        personSelectionLimit={1}
+        principalTypes={[PrincipalType.User]}
+        ensureUser={true}
+        showHiddenInUI={false}
+        resolveDelay={300}
+        defaultSelectedUsers={publishingContactEmail ? [publishingContactEmail] : []}
+        onChange={(items: IPeoplePickerUserItem[]) => {
+          const first = items?.[0];
+          setPublishingContactId(first?.id ? Number(first.id) : null);
+          setPublishingContactEmail(first?.secondaryText);
+        }}
+        webAbsoluteUrl={siteUrl || context.pageContext.web.absoluteUrl}
+        key={`peoplePicker_${editingItem?.Id || 'new'}_${publishingContactEmail}`}
+      />
+    </div>
+  </Stack.Item>
 
-      <Stack.Item grow={1}>
-        <Dropdown
-          label="Department"
-          placeholder="Select department"
-          options={departmentOptions}
-          selectedKey={department}
-          onChange={(_, opt) => setDepartment((opt?.key as string) || undefined)}
-          required
-        />
-      </Stack.Item>
+  {/* NEW: Publishing Date (ArticleDate) */}
+  <Stack.Item grow={1}>
+    <DatePicker
+      label="Publishing Date"
+      placeholder="Select a date"
+      allowTextInput={false}
+      value={articleDate ?? undefined}
+      onSelectDate={(d) => setArticleDate(d ?? null)}
+    />
+  </Stack.Item>
 
-      <Stack.Item grow={1}>
-        <Dropdown
-          label="Publishing Source"
-          placeholder="Select publishing source"
-          options={publishingSourceOptions}
-          selectedKey={publishingSource}
-          onChange={(_, opt) => setPublishingSource((opt?.key as string) || undefined)}
-          required
-        />
-      </Stack.Item>
-    </Stack>
+  <Stack.Item grow={1}>
+    <Dropdown
+      label="Department"
+      placeholder="Select department"
+      options={departmentOptions}
+      selectedKey={department}
+      onChange={(_, opt) => setDepartment((opt?.key as string) || undefined)}
+      required
+    />
+  </Stack.Item>
+
+  <Stack.Item grow={1}>
+    <Dropdown
+      label="Publishing Source"
+      placeholder="Select publishing source"
+      options={publishingSourceOptions}
+      selectedKey={publishingSource}
+      onChange={(_, opt) => setPublishingSource((opt?.key as string) || undefined)}
+      required
+    />
+  </Stack.Item>
+</Stack>
+
 
     <TextField
       label="Abstract"
