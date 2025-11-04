@@ -1,0 +1,86 @@
+/* overall 2-column layout */
+.blogs-table-layout {
+  display: flex;
+  gap: 16px;
+  /* take full viewport height (adjust if your page has its own header) */
+  height: calc(100vh - 40px);
+  box-sizing: border-box;
+}
+
+/* LEFT: CSI divisions – 20% */
+.csi-panel {
+  flex: 0 0 20%;
+  max-width: 20%;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  background: #fff;
+  border-right: 1px solid #e5e5e5;
+  padding-right: 8px;
+}
+
+/* keep SP classic style list looking okay in narrow panel */
+.csi-panel .ms-core-listMenu-root {
+  margin: 0;
+}
+
+/* RIGHT: search + table/cards */
+.content-area {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* important so DetailsList doesn't overflow */
+}
+
+/* top bar (search, buttons, counts) stays fixed */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: #fff;
+  padding: 8px 0 8px 0;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+/* scrollable body (cards/table) */
+.scrollable-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 10px 0 30px 0;
+  min-height: 0;
+}
+
+/* make the DetailsList header sticky inside the scroll area */
+.scrollable-content .ms-DetailsHeader {
+  position: sticky;
+  top: 0; /* it will sit right under the .sticky-header */
+  z-index: 25;
+  background: #fff;
+}
+
+/* blog cards look nicer with a little spacing */
+.blog-post {
+  margin-bottom: 16px;
+}
+
+/* highlighted/current results you already add classes for — let's make them obvious */
+.blog-post.highlighted {
+  outline: 2px solid #ffe58f;
+  background: #fffbe6;
+}
+
+.blog-post.current {
+  outline: 2px solid #005a9e;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* loader at the bottom of cards */
+.loader {
+  text-align: center;
+  padding: 16px 0;
+}
+#spLeftNav{
+    display: none !important;
+}

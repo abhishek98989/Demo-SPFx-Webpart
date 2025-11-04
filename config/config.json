@@ -105,6 +105,14 @@
           "manifest": "./src/webparts/weeklyWordsViewer/WeeklyWordsViewerWebPart.manifest.json"
         }
       ]
+    },
+    "lesson-learned-table-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/lessonLearnedTable/LessonLearnedTableWebPart.js",
+          "manifest": "./src/webparts/lessonLearnedTable/LessonLearnedTableWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},
@@ -122,6 +130,7 @@
     "LocationsWebPartStrings": "lib/webparts/locations/loc/{locale}.js",
     "ResourceLibraryWebPartStrings": "lib/webparts/resourceLibrary/loc/{locale}.js",
     "WeeklyWordsManagementWebPartStrings": "lib/webparts/weeklyWordsManagement/loc/{locale}.js",
-    "WeeklyWordsViewerWebPartStrings": "lib/webparts/weeklyWordsViewer/loc/{locale}.js"
+    "WeeklyWordsViewerWebPartStrings": "lib/webparts/weeklyWordsViewer/loc/{locale}.js",
+    "LessonLearnedTableWebPartStrings": "lib/webparts/lessonLearnedTable/loc/{locale}.js"
   }
 }

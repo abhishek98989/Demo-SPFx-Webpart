@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { spfi, SPFx } from "@pnp/sp";
 import "@pnp/sp/items/list";
 import "@pnp/sp/webs";
@@ -7,12 +7,13 @@ import "@pnp/sp/lists";
 import "@pnp/sp/items";
 import "@pnp/sp/folders";
 import "@pnp/sp/files";
+
 import { DatePicker } from "@fluentui/react/lib/DatePicker";
 import {
-    DetailsList,
-    DetailsListLayoutMode,
-    IColumn,
-    SelectionMode,
+  DetailsList,
+  DetailsListLayoutMode,
+  IColumn,
+  SelectionMode,
 } from "@fluentui/react/lib/DetailsList";
 // ADD this import
 import { SPHttpClient } from "@microsoft/sp-http";
@@ -57,7 +58,7 @@ class SPImageUploadAdapter {
     return { default: url };
   }
 
-  abort() {}
+  abort() { }
 }
 
 export interface INewsManagerProps {
@@ -82,7 +83,7 @@ interface IListItem {
   PublishingRollupImageUrl?: string;   // hyperlink URL
   Abstract?: string;                   // multiline
   InCaseYouMissed?: Array<{ Id: number; Title: string }>;
-  ArticleDate?: string; 
+  ArticleDate?: string;
 }
 
 const NewsManager: React.FC<INewsManagerProps> = (props) => {
@@ -96,6 +97,10 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
   } = props;
 
   const sp = siteUrl != undefined ? spfi(siteUrl).using(SPFx(context)) : spfi().using(SPFx(context));
+  const [searchRaw, setSearchRaw] = useState("");
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<string>("col_artdate");
+  const [sortDesc, setSortDesc] = useState<boolean>(true);
 
   const [items, setItems] = useState<IListItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -123,8 +128,8 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
   // ICYM
   const [icymOptions, setIcymOptions] = useState<Array<{ key: number; text: string }>>([]);
   const [icymSelected, setIcymSelected] = useState<number[]>([]);
-//Article Date 
-const [articleDate, setArticleDate] = useState<Date | null>(null);
+  //Article Date 
+  const [articleDate, setArticleDate] = useState<Date | null>(null);
   // Image picker
   const [imagePickerTarget, setImagePickerTarget] = useState<"editor" | "rollup">("editor");
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
@@ -140,6 +145,7 @@ const [articleDate, setArticleDate] = useState<Date | null>(null);
 
   // NEW: dropdown options
   const departmentOptions: IDropdownOption[] = [
+    { key: "__NONE__", text: "None" },
     { key: "HR", text: "HR" },
     { key: "IT", text: "IT" },
     { key: "Marketing", text: "Marketing" },
@@ -154,14 +160,23 @@ const [articleDate, setArticleDate] = useState<Date | null>(null);
     { key: "Both", text: "Both" },
   ];
 
-  const columns: IColumn[] = [
+  const baseColumns: IColumn[] = [
     { key: "col_title", name: "Title", fieldName: "Title", minWidth: 160, isResizable: true },
     { key: "col_author", name: "Author", minWidth: 120, onRender: (i: IListItem) => i.Author?.Title ?? "—" },
-   // OPTIONAL: nicer Published column text
-{ key: "col_pub", name: "Published", minWidth: 110, onRender: (i) => i.Published ? "Approved" : "Pending" },
- { key: "col_dept", name: "Department", minWidth: 110, onRender: (i) => i.Department || "—" },                // NEW
-    { key: "col_src", name: "Publishing Source", minWidth: 140, onRender: (i) => i.PublishingSource || "—" },    // NEW
+    { key: "col_pub", name: "Published", minWidth: 110, onRender: (i) => i.Published ? "Approved" : "Pending" },
+    { key: "col_dept", name: "Department", minWidth: 110, onRender: (i) => i.Department || "None" },
+    { key: "col_src", name: "Publishing Source", minWidth: 140, onRender: (i) => i.PublishingSource || "—" },
     {
+      key: "col_artdate",
+      name: "Article Date",
+      minWidth: 140,
+      onRender: (i: IListItem) => {
+        const raw = i.ArticleDate || ''; // fallback for safety
+        if (!raw) return "—";
+        const d = new Date(raw);
+        return Number.isFinite(d.getTime()) ? d.toLocaleDateString() : "—";
+      },
+    }, {
       key: "col_rollup", name: "Preview Image", minWidth: 100, onRender: (i) =>
         i.PublishingRollupImageUrl ? <img src={i.PublishingRollupImageUrl} alt="" style={{ width: 72, height: 48, objectFit: "cover", borderRadius: 4 }} /> : "—"
     },
@@ -175,6 +190,18 @@ const [articleDate, setArticleDate] = useState<Date | null>(null);
     }
   ];
 
+  // decorate with sort props and click handler (avoid sorting on actions column)
+  const columns: IColumn[] = baseColumns.map((c) => {
+    const sortable = c.key !== "col_actions" && c.key !== "col_rollup";
+    return {
+      ...c,
+      isSorted: sortable && c.key === sortKey,
+      isSortedDescending: sortable && c.key === sortKey ? sortDesc : undefined,
+      onColumnClick: sortable ? onColumnClick : undefined,
+    };
+  });
+
+
   // Initial data load
   useEffect(() => {
     (async () => {
@@ -187,7 +214,10 @@ const [articleDate, setArticleDate] = useState<Date | null>(null);
     })().catch((e) => setError(parseError(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imagesWebServerRelativeUrl, imagesLibraryTitle]);
-
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchRaw.trim().toLowerCase()), 250);
+    return () => clearTimeout(t);
+  }, [searchRaw]);
   async function loadItems() {
     try {
       setLoading(true);
@@ -211,37 +241,40 @@ const [articleDate, setArticleDate] = useState<Date | null>(null);
           "PublishingContact/Id",
           "PublishingContact/Title",
           "PublishingContact/EMail",
-          "ArticleDate"                  
+          "ArticleDate"
         )
         .expand("InCaseYouMissed", "PublishingContact")
         .orderBy("Created", false)();
 
-    // CHANGE in loadItems(): map Published correctly
-const mapped: IListItem[] = rows.map(r => ({
-  Id: r.Id,
-  Title: r.Title,
-  Author: r.PublishingContact ? {
-    Id: r.PublishingContact.Id,
-    Title: r.PublishingContact.Title,
-    EMail: r.PublishingContact.EMail
-  } : undefined,
-  Created: r.Created,
-  // CHANGED: 0=Approved, 2=Pending, 1=Rejected, 3=Draft, 4=Scheduled
-  Published: r.OData__ModerationStatus === 0,
-  Description: r.VaughnContent as string,
-  Department: r.Department || undefined,
-  PublishingSource: r.PublishingSource || undefined,
-  PublishingRollupImageUrl: r.PublishingRollupImage ? (r.PublishingRollupImage.Url || r.PublishingRollupImage) : "",
-  Abstract: r.Abstract || "",
-    ArticleDate: r.ArticleDate || undefined,
-  InCaseYouMissed: Array.isArray(r.InCaseYouMissed) ? r.InCaseYouMissed.map((x: any) => ({ Id: x.Id, Title: x.Title })) : []
-}));
+      // CHANGE in loadItems(): map Published correctly
+      const mapped: IListItem[] = rows.map(r => ({
+        Id: r.Id,
+        Title: r.Title,
+        Author: r.PublishingContact ? {
+          Id: r.PublishingContact.Id,
+          Title: r.PublishingContact.Title,
+          EMail: r.PublishingContact.EMail
+        } : undefined,
+        Created: r.Created,
+        // CHANGED: 0=Approved, 2=Pending, 1=Rejected, 3=Draft, 4=Scheduled
+        Published: r.OData__ModerationStatus === 0,
+        Description: r.VaughnContent as string,
+        Department: r.Department || undefined,
+        PublishingSource: r.PublishingSource || undefined,
+        PublishingRollupImageUrl: r.PublishingRollupImage ? (r.PublishingRollupImage.Url || r.PublishingRollupImage) : "",
+        Abstract: r.Abstract || "",
+        ArticleDate: r.ArticleDate || undefined,
+        InCaseYouMissed: Array.isArray(r.InCaseYouMissed) ? r.InCaseYouMissed.map((x: any) => ({ Id: x.Id, Title: x.Title })) : []
+      }));
 
 
       setItems(mapped);
 
-      const allForLookup = mapped.map(m => ({ key: m.Id, text: m.Title }));
-      setIcymOptions(allForLookup);
+      const options = mapped
+        .filter(m => m?.Published && !!m?.Title && m?.Title.trim().length > 0)
+        .map(m => ({ key: m.Id, text: m.Title }));
+
+      setIcymOptions(options);
 
     } catch (e) {
       setError(parseError(e));
@@ -265,7 +298,7 @@ const mapped: IListItem[] = rows.map(r => ({
     setPublishingContactId(null);
     setPublishingContactEmail(undefined);
     setIcymSelected([]);
- setArticleDate(null);
+    setArticleDate(null);
     setIsPanelOpen(true);
   }
 
@@ -274,9 +307,9 @@ const mapped: IListItem[] = rows.map(r => ({
     setTitle(item.Title);
     setDescriptionHtml(item.Description || "");
     setPublished(!!item.Published);
- setArticleDate(item.ArticleDate ? new Date(item.ArticleDate) : null);
+    setArticleDate(item.ArticleDate ? new Date(item.ArticleDate) : null);
     // NEW fields populate
-    setDepartment(item.Department);
+    setDepartment(item.Department ?? undefined);
     setPublishingSource(item.PublishingSource);
 
     setRollupImageUrl(item.PublishingRollupImageUrl || "");
@@ -288,54 +321,54 @@ const mapped: IListItem[] = rows.map(r => ({
     setIsPanelOpen(true);
   }
 
- // CHANGE in saveItem(): after add/update, set approval based on the checkbox
-// CHANGE in saveItem(): after add/update, set approval based on the checkbox
-async function saveItem() {
-  try {
-    setLoading(true);
-    setError(null);
-    const list = sp.web.lists.getById(listId);
+  // CHANGE in saveItem(): after add/update, set approval based on the checkbox
+  // CHANGE in saveItem(): after add/update, set approval based on the checkbox
+  async function saveItem() {
+    try {
+      setLoading(true);
+      setError(null);
+      const list = sp.web.lists.getById(listId);
 
-    const body: any = {
-      Title: title,
-      VaughnContent: descriptionHtml,
-      Abstract: abstractText,
-      PublishingRollupImage: rollupImageUrl ? { Url: rollupImageUrl, Description: "Rollup" } : null,
-      PublishingContactId: publishingContactId ?? null,
-      Department: department || null,
-      PublishingSource: publishingSource || null,
-       ArticleDate: articleDate ? articleDate : null
-      // DO NOT try to set OData__ModerationStatus directly
-    };
+      const body: any = {
+        Title: title,
+        VaughnContent: descriptionHtml,
+        Abstract: abstractText,
+        PublishingRollupImage: rollupImageUrl ? { Url: rollupImageUrl, Description: "Rollup" } : null,
+        PublishingContactId: publishingContactId ?? null,
+        Department: department || null,
+        PublishingSource: publishingSource || null,
+        ArticleDate: articleDate ? articleDate : null
+        // DO NOT try to set OData__ModerationStatus directly
+      };
 
-    // Multi-lookup field: only add if there are selections, otherwise omit entirely
-    if (icymSelected.length > 0) {
-      body.InCaseYouMissedId = icymSelected ;
-    }
-
-    let itemId: number;
-
-    if (editingItem) {
-      await list.items.getById(editingItem.Id).update(body);
-      itemId = editingItem.Id;
-      
-      // If we need to clear the multi-lookup field when empty
-      if (icymSelected.length === 0) {
-        await list.items.getById(itemId).update({ InCaseYouMissedId: { results: [] } });
+      // Multi-lookup field: only add if there are selections, otherwise omit entirely
+      if (icymSelected.length > 0) {
+        body.InCaseYouMissedId = icymSelected;
       }
-    } else {
-      const addRes = await list.items.add(body);
-     
-    }
 
-  
-    setIsPanelOpen(false);
-    await loadItems();
-  } catch (e) {
-    setError(parseError(e));
-    setLoading(false);
+      let itemId: number;
+
+      if (editingItem) {
+        await list.items.getById(editingItem.Id).update(body);
+        itemId = editingItem.Id;
+
+        // If we need to clear the multi-lookup field when empty
+        if (icymSelected.length === 0) {
+          await list.items.getById(itemId).update({ InCaseYouMissedId: { results: [] } });
+        }
+      } else {
+        const addRes = await list.items.add(body);
+
+      }
+
+
+      setIsPanelOpen(false);
+      await loadItems();
+    } catch (e) {
+      setError(parseError(e));
+      setLoading(false);
+    }
   }
-}
   // Delete flow
   const [deleteTarget, setDeleteTarget] = useState<IListItem | null>(null);
   function confirmDelete(item: IListItem) { setDeleteTarget(item); }
@@ -352,6 +385,84 @@ async function saveItem() {
       setLoading(false);
     }
   }
+  // accessors for sorting per column
+  const accessors: Record<string, (i: IListItem) => string> = {
+    col_title: (i) => i.Title || "",
+    col_author: (i) => i.Author?.Title || "",
+    col_pub: (i) => (i.Published ? "Approved" : "Pending"),
+    col_dept: (i) => i.Department || "None",
+    col_src: (i) => i.PublishingSource || "",
+    col_rollup: (i) => i.PublishingRollupImageUrl || "",
+    col_artdate: (i) => i.ArticleDate || "",
+  };
+  // robust numeric timestamp, fallback to 0
+  function tsOf(i: IListItem): number {
+    const s = accessors.col_artdate(i);
+    const n = s ? new Date(s).getTime() : NaN;
+    return Number.isFinite(n) ? n : 0;
+  }
+  function onColumnClick(ev?: React.MouseEvent<HTMLElement>, column?: IColumn) {
+    if (!column) return;
+    const newKey = column.key;
+    if (newKey === sortKey) {
+      setSortDesc(!sortDesc);
+    } else {
+      setSortKey(newKey);
+      setSortDesc(false);
+    }
+  }
+
+  // normalize HTML to text for Description search
+  function stripHtml(html?: string) {
+    if (!html) return "";
+    return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  const haystack = (i: IListItem) => {
+    const parts = [
+      i.Title,
+      i.Author?.Title,
+      i.Author?.EMail,
+      i.Department,
+      i.PublishingSource,
+      i.Abstract,
+      i.PublishingRollupImageUrl,
+      i.Published ? "approved" : "pending",
+      stripHtml(i.Description),
+      i.ArticleDate,
+      i.Created,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return parts;
+  };
+
+  const displayItems = useMemo(() => {
+    let rows = items;
+
+    if (search) {
+      rows = rows.filter((i) => haystack(i).includes(search));
+    }
+
+    // date sort: newest first by default (sortDesc=true)
+    if (sortKey === "col_artdate") {
+      const sorted = [...rows].sort((a, b) => tsOf(a) - tsOf(b));
+      return sortDesc ? sorted.reverse() : sorted;
+    }
+
+    // string sorts for other columns
+    const acc = accessors[sortKey] || accessors["col_title"];
+    const sorted = [...rows].sort((a, b) => {
+      const av = acc(a).toLocaleLowerCase();
+      const bv = acc(b).toLocaleLowerCase();
+      if (av < bv) return -1;
+      if (av > bv) return 1;
+      return 0;
+    });
+
+    return sortDesc ? sorted.reverse() : sorted;
+  }, [items, search, sortKey, sortDesc]);
 
   // Image Picker logic
   useEffect(() => {
@@ -453,7 +564,7 @@ async function saveItem() {
     <div className="p-4">
       <Stack tokens={{ childrenGap: 12 }}>
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-          <h2 style={{ margin: 0 }}>Weekly Words Management</h2>
+          <a href="https://vaughnconstruction.sharepoint.com/sites/Intranet/Lists/TestWeeklyWords/AllItems.aspx" target="_blank" rel="noopener noreferrer">  <h2 style={{ margin: 0 }}>Weekly Words Management</h2></a>
           <PrimaryButton text="Add new" onClick={openAddPanel} iconProps={{ iconName: "Add" }} />
         </Stack>
 
@@ -462,9 +573,14 @@ async function saveItem() {
             {error}
           </MessageBar>
         )}
-
+        <TextField
+          placeholder="Search all columns…"
+          value={searchRaw}
+          onChange={(_, v) => setSearchRaw(v || "")}
+          iconProps={{ iconName: "Search" }}
+        />
         <DetailsList
-          items={items}
+          items={displayItems}
           columns={columns}
           compact={false}
           selectionMode={SelectionMode.none}
@@ -473,229 +589,236 @@ async function saveItem() {
           isHeaderVisible
         />
 
+
         {loading && <span>Loading…</span>}
       </Stack>
 
       {/* Add/Edit Panel */}
-     <Panel
-  isOpen={isPanelOpen}
-  onDismiss={() => setIsPanelOpen(false)}
-  isBlocking={false}
-  type={PanelType.largeFixed}
-  headerText={editingItem ? "Edit item" : "Add new item"}
-  closeButtonAriaLabel="Close"
->
-  <Stack tokens={{ childrenGap: 12 }}>
-    <TextField label="Title" required value={title} onChange={(_, v) => setTitle(v || "")} />
+      <Panel
+        isOpen={isPanelOpen}
+        onDismiss={() => setIsPanelOpen(false)}
+        isBlocking={false}
+        type={PanelType.largeFixed}
+        headerText={editingItem ? "Edit item" : "Add new item"}
+        closeButtonAriaLabel="Close"
+      >
+        <Stack tokens={{ childrenGap: 12 }}>
+          <TextField label="Title" required value={title} onChange={(_, v) => setTitle(v || "")} />
 
-    <Stack horizontal tokens={{ childrenGap: 8 }}>
-      <PrimaryButton
-        text="Insert image"
-        iconProps={{ iconName: "Photo" }}
-        onClick={() => { setImagePickerTarget("editor"); setIsImagePickerOpen(true); }}
-      />
-      <DefaultButton
-        text="Insert URL"
-        onClick={handleUrlInsert}
-        iconProps={{ iconName: "Link" }}
-      />
-      <TextField
-        placeholder="https://…"
-        value={urlToInsert}
-        onChange={(_, v) => setUrlToInsert(v || "")}
-        styles={{ root: { width: 320 } }}
-      />
-    </Stack>
+          <Stack horizontal tokens={{ childrenGap: 8 }}>
+            <PrimaryButton
+              text="Insert image"
+              iconProps={{ iconName: "Photo" }}
+              onClick={() => { setImagePickerTarget("editor"); setIsImagePickerOpen(true); }}
+            />
+            <DefaultButton
+              text="Insert URL"
+              onClick={handleUrlInsert}
+              iconProps={{ iconName: "Link" }}
+            />
+            <TextField
+              placeholder="https://…"
+              value={urlToInsert}
+              onChange={(_, v) => setUrlToInsert(v || "")}
+              styles={{ root: { width: 320 } }}
+            />
+          </Stack>
 
-    <div>
-      <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>
-        Page Content
-      </label>
+          <div>
+            <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>
+              Page Content
+            </label>
 
-      <CKEditor
-        editor={ClassicEditor}
-        data={descriptionHtml || ""}
-        onReady={(editor: any) => {
-          editorRef.current = editor;
-          editor.plugins.get("FileRepository").createUploadAdapter = (loader: any) =>
-            new SPImageUploadAdapter(
-              loader,
-              context,
-              currentFolder || `${imagesWebServerRelativeUrl}/PublishingImages`
-            );
-        }}
-        onChange={(_: any, editor: any) => {
-          setDescriptionHtml(editor.getData());
-        }}
-        config={{
-          toolbar: [
-            "heading",
-            "|",
-            "bold",
-            "italic",
-            "underline",
-            "strikethrough",
-            "|",
-            "bulletedList",
-            "numberedList",
-            "todoList",
-            "|",
-            "alignment",
-            "outdent",
-            "indent",
-            "|",
-            "link",
-            "insertTable",
-            "imageUpload",
-            "blockQuote",
-            "codeBlock",
-            "|",
-            "undo",
-            "redo",
-          ],
-          image: {
-            toolbar: [
-              "imageTextAlternative",
-              "toggleImageCaption",
-              "imageStyle:inline",
-              "imageStyle:block",
-              "imageStyle:side",
-            ],
-          },
-          table: {
-            contentToolbar: ["tableColumn", "tableRow", "mergeTableCells", "toggleTableCaption"],
-          },
-        }}
-      />
-    </div>
+            <CKEditor
+              editor={ClassicEditor}
+              data={descriptionHtml || ""}
+              onReady={(editor: any) => {
+                editorRef.current = editor;
+                editor.plugins.get("FileRepository").createUploadAdapter = (loader: any) =>
+                  new SPImageUploadAdapter(
+                    loader,
+                    context,
+                    currentFolder || `${imagesWebServerRelativeUrl}/PublishingImages`
+                  );
+              }}
+              onChange={(_: any, editor: any) => {
+                setDescriptionHtml(editor.getData());
+              }}
+              config={{
+                toolbar: [
+                  "heading",
+                  "|",
+                  "bold",
+                  "italic",
+                  "underline",
+                  "strikethrough",
+                  "|",
+                  "bulletedList",
+                  "numberedList",
+                  "todoList",
+                  "|",
+                  "alignment",
+                  "outdent",
+                  "indent",
+                  "|",
+                  "link",
+                  "insertTable",
+                  "imageUpload",
+                  "blockQuote",
+                  "codeBlock",
+                  "|",
+                  "undo",
+                  "redo",
+                ],
+                image: {
+                  toolbar: [
+                    "imageTextAlternative",
+                    "toggleImageCaption",
+                    "imageStyle:inline",
+                    "imageStyle:block",
+                    "imageStyle:side",
+                  ],
+                },
+                table: {
+                  contentToolbar: ["tableColumn", "tableRow", "mergeTableCells", "toggleTableCaption"],
+                },
+              }}
+            />
+          </div>
 
-    {/* Publishing Contact, Department, and Publishing Source in one row */}
- <Stack horizontal tokens={{ childrenGap: 12 }}>
-  <Stack.Item grow={1}>
-    <div>
-      <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>Publishing Contact</label>
-      <PeoplePicker
-        context={context}
-        personSelectionLimit={1}
-        principalTypes={[PrincipalType.User]}
-        ensureUser={true}
-        showHiddenInUI={false}
-        resolveDelay={300}
-        defaultSelectedUsers={publishingContactEmail ? [publishingContactEmail] : []}
-        onChange={(items: IPeoplePickerUserItem[]) => {
-          const first = items?.[0];
-          setPublishingContactId(first?.id ? Number(first.id) : null);
-          setPublishingContactEmail(first?.secondaryText);
-        }}
-        webAbsoluteUrl={siteUrl || context.pageContext.web.absoluteUrl}
-        key={`peoplePicker_${editingItem?.Id || 'new'}_${publishingContactEmail}`}
-      />
-    </div>
-  </Stack.Item>
+          {/* Publishing Contact, Department, and Publishing Source in one row */}
+          <Stack horizontal tokens={{ childrenGap: 12 }}>
+            <Stack.Item grow={1}>
+              <div>
+                <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>Publishing Contact</label>
+                <PeoplePicker
+                  context={context}
+                  personSelectionLimit={1}
+                  principalTypes={[PrincipalType.User]}
+                  ensureUser={true}
+                  showHiddenInUI={false}
+                  resolveDelay={300}
+                  defaultSelectedUsers={publishingContactEmail ? [publishingContactEmail] : []}
+                  onChange={(items: IPeoplePickerUserItem[]) => {
+                    const first = items?.[0];
+                    setPublishingContactId(first?.id ? Number(first.id) : null);
+                    setPublishingContactEmail(first?.secondaryText);
+                  }}
+                  webAbsoluteUrl={siteUrl || context.pageContext.web.absoluteUrl}
+                  key={`peoplePicker_${editingItem?.Id || 'new'}_${publishingContactEmail}`}
+                />
+              </div>
+            </Stack.Item>
 
-  {/* NEW: Publishing Date (ArticleDate) */}
-  <Stack.Item grow={1}>
-    <DatePicker
-      label="Publishing Date"
-      placeholder="Select a date"
-      allowTextInput={false}
-      value={articleDate ?? undefined}
-      onSelectDate={(d) => setArticleDate(d ?? null)}
-    />
-  </Stack.Item>
+            {/* NEW: Publishing Date (ArticleDate) */}
+            <Stack.Item grow={1}>
+              <DatePicker
+                label="Publishing Date"
+                placeholder="Select a date"
+                allowTextInput={false}
+                value={articleDate ?? undefined}
+                onSelectDate={(d) => setArticleDate(d ?? null)}
+              />
+            </Stack.Item>
 
-  <Stack.Item grow={1}>
-    <Dropdown
-      label="Department"
-      placeholder="Select department"
-      options={departmentOptions}
-      selectedKey={department}
-      onChange={(_, opt) => setDepartment((opt?.key as string) || undefined)}
-      required
-    />
-  </Stack.Item>
+            <Stack.Item grow={1}>
+              <Dropdown
+                label="Department"
+                placeholder="Select department"
+                options={departmentOptions}
+                selectedKey={department ?? "__NONE__"}               
+                onChange={(_, opt) => {
+                  const key = (opt?.key as string) || "__NONE__";
+                  setDepartment(key === "__NONE__" ? undefined : (opt!.key as string));
+                }}
+              />
 
-  <Stack.Item grow={1}>
-    <Dropdown
-      label="Publishing Source"
-      placeholder="Select publishing source"
-      options={publishingSourceOptions}
-      selectedKey={publishingSource}
-      onChange={(_, opt) => setPublishingSource((opt?.key as string) || undefined)}
-      required
-    />
-  </Stack.Item>
-</Stack>
+            </Stack.Item>
+
+            <Stack.Item grow={1}>
+              <Dropdown
+                label="Publishing Source"
+                placeholder="Select publishing source"
+                options={publishingSourceOptions}
+                selectedKey={publishingSource}
+                onChange={(_, opt) => setPublishingSource((opt?.key as string) || undefined)}
+                required
+              />
+            </Stack.Item>
+          </Stack>
 
 
-    <TextField
-      label="Abstract"
-      multiline
-      rows={4}
-      value={abstractText}
-      onChange={(_, v) => setAbstractText(v || "")}
-    />
-
-    <Stack tokens={{ childrenGap: 8 }}>
-      <label style={{ fontWeight: 600 }}>Preview Image</label>
-      {rollupImageUrl ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <img src={rollupImageUrl} alt="Rollup" style={{ width: 120, height: 80, objectFit: "cover", borderRadius: 6 }} />
           <TextField
-            label="Image URL"
-            value={rollupImageUrl}
-            onChange={(_, v) => setRollupImageUrl(v || "")}
-            styles={{ root: { width: 420 } }}
+            label="Abstract"
+            multiline
+            rows={4}
+            value={abstractText}
+            onChange={(_, v) => setAbstractText(v || "")}
           />
-          <DefaultButton text="Clear" onClick={() => setRollupImageUrl("")} />
-        </div>
-      ) : (
-        <TextField
-          label="Image URL"
-          placeholder="https://…"
-          value={rollupImageUrl}
-          onChange={(_, v) => setRollupImageUrl(v || "")}
-          styles={{ root: { width: 420 } }}
-        />
-      )}
-      <DefaultButton
-        text="Select Preview Image"
-        iconProps={{ iconName: "Photo2Fill" }}
-        onClick={() => { setImagePickerTarget("rollup"); setIsImagePickerOpen(true); }}
-      />
-    </Stack>
 
-    {/* In Case You Missed - Full Width */}
-    <Stack tokens={{ childrenGap: 6 }}>
-      <label style={{ fontWeight: 600 }}>In Case You Missed (pick up to 4)</label>
-      <Dropdown
-        placeholder="Select items"
-        multiSelect
-        selectedKeys={icymSelected}
-        options={icymOptions as IDropdownOption[]}
-        onChange={(_, option) => {
-          if (!option) return;
-          const id = Number(option.key);
-          const isSelected = icymSelected.includes(id);
-          if (isSelected) {
-            setIcymSelected(icymSelected.filter(k => k !== id));
-          } else {
-            if (icymSelected.length >= 4) {
-              setError("You can select at most 4 items in 'In Case You Missed'.");
-              return;
-            }
-            setIcymSelected([...icymSelected, id]);
-          }
-        }}
-      />
-    </Stack>
+          <Stack tokens={{ childrenGap: 8 }}>
+            <label style={{ fontWeight: 600 }}>Preview Image</label>
+            {rollupImageUrl ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <img src={rollupImageUrl} alt="Rollup" style={{ width: 120, height: 80, objectFit: "cover", borderRadius: 6 }} />
+                <TextField
+                  label="Image URL"
+                  value={rollupImageUrl}
+                  onChange={(_, v) => setRollupImageUrl(v || "")}
+                  styles={{ root: { width: 420 } }}
+                />
+                <DefaultButton text="Clear" onClick={() => setRollupImageUrl("")} />
+              </div>
+            ) : (
+              <TextField
+                label="Image URL"
+                placeholder="https://…"
+                value={rollupImageUrl}
+                onChange={(_, v) => setRollupImageUrl(v || "")}
+                styles={{ root: { width: 420 } }}
+              />
+            )}
+            <DefaultButton
+              text="Select Preview Image"
+              iconProps={{ iconName: "Photo2Fill" }}
+              onClick={() => { setImagePickerTarget("rollup"); setIsImagePickerOpen(true); }}
+            />
+          </Stack>
 
-    <Stack horizontal tokens={{ childrenGap: 8 }}>
-      <PrimaryButton text="Save" onClick={saveItem} />
-      <DefaultButton text="Cancel" onClick={() => setIsPanelOpen(false)} />
-    </Stack>
-  </Stack>
-</Panel>
+          {/* In Case You Missed - Full Width */}
+          <Stack tokens={{ childrenGap: 6 }}>
+            <label style={{ fontWeight: 600 }}>In Case You Missed (pick up to 4)</label>
+            <Dropdown
+              placeholder="Select items"
+              multiSelect
+              selectedKeys={icymSelected}
+              options={(editingItem
+                ? (icymOptions as IDropdownOption[]).filter(o => Number(o.key) !== editingItem.Id)
+                : (icymOptions as IDropdownOption[])
+              )}
+              onChange={(_, option) => {
+                if (!option) return;
+                const id = Number(option.key);
+                const isSelected = icymSelected.includes(id);
+                if (isSelected) {
+                  setIcymSelected(icymSelected.filter(k => k !== id));
+                } else {
+                  if (icymSelected.length >= 4) {
+                    alert("You can select at most 4 items in 'In Case You Missed'.");
+                    return;
+                  }
+                  setIcymSelected([...icymSelected, id]);
+                }
+              }}
+            />
+          </Stack>
+
+          <Stack horizontal tokens={{ childrenGap: 8 }}>
+            <PrimaryButton text="Save" onClick={saveItem} />
+            <DefaultButton text="Cancel" onClick={() => setIsPanelOpen(false)} />
+          </Stack>
+        </Stack>
+      </Panel>
 
       {/* Image Picker Panel */}
       <Panel

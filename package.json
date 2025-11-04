@@ -32,6 +32,7 @@
     "bootstrap": "^5.3.6",
     "dompurify": "^3.2.5",
     "jquery": "^3.7.1",
+    "lucide-react": "^0.546.0",
     "office-ui-fabric-react": "^7.204.1",
     "react": "17.0.1",
     "react-big-calendar": "^1.18.0",

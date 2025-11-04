@@ -1,6 +1,6 @@
-// Updated ModernCalendar.tsx with permission handling
 import * as React from 'react';
 import { useState, useEffect } from 'react';
+import { DetailsList, DetailsListLayoutMode, IColumn, SelectionMode } from '@fluentui/react/lib/DetailsList';
 import { IModernCalendarProps } from './IModernCalendarProps';
 import { SPFx, spfi } from "@pnp/sp/presets/all";
 import "@pnp/sp/lists";
@@ -8,15 +8,15 @@ import { parseString } from 'xml2js';
 import "@pnp/sp/items";
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import { Panel, PanelType } from '@fluentui/react/lib/Panel';
-import { List } from '@fluentui/react/lib/List';
 import { PermissionKind } from "@pnp/sp/security";
-import { Text } from '@fluentui/react/lib/Text';
 import { format } from 'date-fns';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import EventForm from './EventForm';
 import moment from 'moment';
 import { useGlobalLoaderContext } from '../../../globalCommon/customLoader';
 import "@pnp/sp/security";
+import { Checkbox } from '@fluentui/react/lib/Checkbox';
+
 export interface ICalendarEvent {
   id: string;
   title: string;
@@ -35,9 +35,10 @@ export interface ICalendarEvent {
   RecurrenceData: any;
   fAllDayEvent?: boolean;
   modifiedBy: any;
+  Color?: string;
+  FontColor?: string;
 }
 
-// Permission interface
 interface IUserPermissions {
   canAdd: boolean;
   canEdit: boolean;
@@ -47,22 +48,24 @@ interface IUserPermissions {
 
 let AllGeneratedevents: any = [];
 const localizer = momentLocalizer(moment);
+const NA_CATEGORY = 'N/A';
 
 export default function ModernCalendar(props: any) {
   const { showLoader, hideLoader } = useGlobalLoaderContext();
+
   const [events, setEvents] = useState<ICalendarEvent[]>([]);
   const [showModal, setShowModal] = useState<boolean>(false);
   const [selectedEvent, setSelectedEvent] = useState<ICalendarEvent | null>(null);
   const [isNewEvent, setIsNewEvent] = useState<boolean>(true);
   const [currentCalendarDate, setCurrentCalendarDate] = useState<Date>(new Date());
   const [currentCalendarView, setCurrentCalendarView] = useState<String>('month');
+
   const sp = props?.siteUrl != undefined ? spfi(props?.siteUrl).using(SPFx(props?.Context)) : spfi().using(SPFx(props?.Context));
   const [showDatePanel, setShowDatePanel] = useState(false);
   const [selectedDateEvents, setSelectedDateEvents] = useState<ICalendarEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
-  // Permission state
-  const [userPermissions, setUserPermissions] = useState<any>({
+  const [userPermissions, setUserPermissions] = useState<IUserPermissions>({
     canAdd: false,
     canEdit: false,
     canDelete: false,
@@ -70,6 +73,126 @@ export default function ModernCalendar(props: any) {
   });
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
+  // ===== CATEGORIES: options-by-calendar with N/A appended =====
+  type Option = { key: string; text: string };
+  const [categoryOptions, setCategoryOptions] = React.useState<Option[]>([]);
+
+  const calendarTitle = props?.CalendarTitle as string | undefined;
+
+  useEffect(() => {
+    const base: Option[] =
+      calendarTitle === 'Marketing Calendar'
+        ? [
+            { key: 'Meeting', text: 'Meeting' },
+            { key: 'RFQ', text: 'RFQ' },
+            { key: 'RFP', text: 'RFP' },
+            { key: 'CSP/Traditional', text: 'CSP/Traditional' },
+            { key: 'DB', text: 'DB' },
+            { key: 'Interview', text: 'Interview' }
+          ]
+        : calendarTitle === 'Marketing Calendar-Internal'
+        ? [
+            { key: 'PTO', text: 'PTO' },
+            { key: 'Remote', text: 'Remote' },
+            { key: 'Appointment', text: 'Appointment' },
+            { key: 'Site Visit', text: 'Site Visit' },
+            { key: 'Interview Prep', text: 'Interview Prep' },
+            { key: 'Other', text: 'Other' }
+          ]
+        : calendarTitle === 'Company Calendar'
+        ? [
+            { key: 'Safety', text: 'Safety' },
+            { key: 'Ops', text: 'Ops' },
+            { key: 'HR', text: 'HR' },
+            { key: 'Other', text: 'Other' }
+          ]
+        : [];
+
+    // Always append N/A at the end (avoid dupes)
+    const withNA = [...base.filter(o => o.key !== NA_CATEGORY), { key: NA_CATEGORY, text: NA_CATEGORY }];
+    setCategoryOptions(withNA);
+  }, [calendarTitle]);
+
+  // ===== COLOR MAPS =====
+  const isTraining = calendarTitle === 'Company Calendar';
+
+  const categoryOptionsColor: Record<string, string> = {
+    // Marketing + Internal
+    'Meeting': '#3174ad',
+    'RFQ': '#ffff00',
+    'RFP': '#107c10',
+    'CSP/Traditional': '#da3b01',
+    'DB': '#c239b3',
+    'Interview': '#adadad',
+    'Appointment': '#0099bc',
+    'Site Visit': '#00b294',
+    'Remote': '#004e8c',
+    'Interview Prep': '#ffaa44',
+    'Other': '#605e5c',
+    'PTO': '#e3008c',
+    // N/A fallback (grey)
+    [NA_CATEGORY]: '#605e5c',
+  };
+  const categoryOptionsFontColor: Record<string, string> = {
+    'Meeting': '#ffffff',
+    'RFQ': '#000000',
+    'RFP': '#ffffff',
+    'CSP/Traditional': '#ffffff',
+    'DB': '#ffffff',
+    'Interview': '#000000',
+    'Appointment': '#ffffff',
+    'Site Visit': '#000000',
+    'Remote': '#ffffff',
+    'Interview Prep': '#000000',
+    'Other': '#ffffff',
+    'PTO': '#ffffff',
+    [NA_CATEGORY]: '#ffffff',
+  };
+
+  const categoryOptionsColorTraining: Record<string, string> = {
+    'Safety': '#ff0000',
+    'Ops': '#3174ad',
+    'HR': '#107c10',
+    'Other': '#ffff00',
+    [NA_CATEGORY]: '#605e5c',
+  };
+  const categoryOptionsFontColorTraining: Record<string, string> = {
+    'Safety': '#ffffff',
+    'Ops': '#ffffff',
+    'HR': '#ffffff',
+    'Other': '#000000',
+    [NA_CATEGORY]: '#ffffff',
+  };
+
+  // Build palette **only** for categories in categoryOptions (plus N/A already present)
+  const categoryPalette: Record<string, { bg: string; fg: string }> = React.useMemo(() => {
+    const base = isTraining ? categoryOptionsColorTraining : categoryOptionsColor;
+    const baseFont = isTraining ? categoryOptionsFontColorTraining : categoryOptionsFontColor;
+
+    const map: Record<string, { bg: string; fg: string }> = {};
+    categoryOptions.forEach(opt => {
+      const k = opt.key;
+      map[k] = { bg: base[k] ?? '#605e5c', fg: baseFont[k] ?? '#ffffff' };
+    });
+    return map;
+  }, [isTraining, categoryOptions]);
+
+  // Derived, ordered list of category keys for the filter bar
+  const categoryList = React.useMemo(() => categoryOptions.map(o => o.key), [categoryOptions]);
+
+  // Filter selection
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    // Select all whenever categoryOptions change (e.g., calendar switch)
+    setSelectedCategories(new Set(categoryList));
+  }, [categoryList]);
+
+  const filteredEvents = React.useMemo(() => {
+    if (!selectedCategories || selectedCategories.size === 0) return [];
+    return events.filter(e => selectedCategories.has(e.category ?? NA_CATEGORY));
+  }, [events, selectedCategories]);
+
+  // ===== PERMISSIONS =====
   useEffect(() => {
     if (props.MarketingCalendarId) {
       showLoader('Loading...');
@@ -77,7 +200,6 @@ export default function ModernCalendar(props: any) {
     }
   }, [props.MarketingCalendarId]);
 
-  // Check user permissions for the list
   const checkUserPermissions = async (): Promise<void> => {
     if (!props?.MarketingCalendarId) {
       console.warn('No MarketingCalendarId provided for permission check');
@@ -86,53 +208,42 @@ export default function ModernCalendar(props: any) {
     }
 
     try {
-      // Get current user
       const currentUser = await sp.web.currentUser();
       setCurrentUserId(currentUser.Id);
 
       const list = sp.web.lists.getById(props.MarketingCalendarId);
-
-      // Try multiple ways to get effective permissions, with retries and fallbacks
       let userPerms: any = null;
       const maxAttempts = 3;
+
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-          // Preferred: current user's effective permissions on the list (no args)
           userPerms = await list.getCurrentUserEffectivePermissions();
           if (userPerms) break;
-        } catch (err) {
-          // fallback - try with LoginName
+        } catch {
           try {
             if (currentUser && currentUser.LoginName) {
               userPerms = await list.getUserEffectivePermissions(currentUser.LoginName);
               if (userPerms) break;
             }
-          } catch (err2) {
-            // fallback - try with numeric id
-              try {
+          } catch {
+            try {
               if (currentUser && currentUser.Id) {
                 userPerms = await list.getUserEffectivePermissions(String(currentUser.Id));
                 if (userPerms) break;
               }
-            } catch (err3) {
-              // swallow and retry
-            }
+            } catch { /* ignore */ }
           }
         }
-
-        // small backoff before retrying
         await new Promise(res => setTimeout(res, 200 * attempt));
       }
 
       if (!userPerms) {
-        // Could not determine permissions
         console.warn('Unable to determine user permissions for list after retries');
         setUserPermissions({ canAdd: false, canEdit: false, canDelete: false, canView: true });
         hideLoader();
         return;
       }
 
-      // Evaluate specific permissions using PnP helper
       const permissions = {
         canView: sp.web.hasPermissions(userPerms, PermissionKind.ViewListItems),
         canAdd: sp.web.hasPermissions(userPerms, PermissionKind.AddListItems),
@@ -141,22 +252,19 @@ export default function ModernCalendar(props: any) {
       };
 
       setUserPermissions(permissions);
-
       if (permissions.canView) {
         await loadEvents();
       } else {
         hideLoader();
-        console.warn('User does not have permission to view this calendar');
       }
     } catch (error) {
       hideLoader();
       console.error('Error checking user permissions:', error);
-      // Default to no permissions if the check fails
       setUserPermissions({ canAdd: false, canEdit: false, canDelete: false, canView: true });
-      // Do not attempt to load events if permissions are unknown or denied.
     }
   };
 
+  // ===== LOAD EVENTS =====
   const loadEvents = async (): Promise<void> => {
     if (!props.MarketingCalendarId) {
       console.error('List name not provided');
@@ -168,14 +276,17 @@ export default function ModernCalendar(props: any) {
       const items = await sp.web.lists.getById(props?.MarketingCalendarId)
         .items
         .select('Id,Title,Location,EventDate,RecurrenceData,fRecurrence,fAllDayEvent,EndDate,Description,ParticipantsPicker/Id,Category,FreeBusy,Overbook,Modified,Created,Author/Title,Author/Id,Editor/Title')
-        .expand('Author,Editor,ParticipantsPicker').top(5000)()
+        .expand('Author,Editor,ParticipantsPicker').top(5000)();
 
       const NonRecurrenceData = items.filter((item) => item?.RecurrenceData == null);
       const Recurrencedatas = items.filter((item) => item?.RecurrenceData != null && item?.RecurrenceData != 'Every 1 day(s)');
-      const isTraining = props?.CalendarTitle == 'Company Calendar';
 
+      const isTrainingLocal = calendarTitle === 'Company Calendar';
+
+      // Normalize non-recurring items (category -> N/A if missing)
       const calendarEvents: ICalendarEvent[] = NonRecurrenceData.map((item: any) => {
-        const { Color, FontColor } = getCategoryColors(item?.Category, isTraining);
+        const normCat = (item?.Category && String(item.Category).trim()) ? item.Category : NA_CATEGORY;
+        const { Color, FontColor } = getCategoryColors(normCat, isTrainingLocal);
         return {
           id: item.Id.toString(),
           title: item.Title || '',
@@ -184,7 +295,7 @@ export default function ModernCalendar(props: any) {
           endTime: new Date(item.EndDate?.replace('Z', '')),
           description: item.Description || '',
           attendees: item.ParticipantsPicker || [],
-          category: item.Category || '',
+          category: normCat,
           resources: item.Resources || '',
           freeBusy: item.FreeBusy || '',
           checkDoubleBooking: item.Overbook || false,
@@ -201,36 +312,27 @@ export default function ModernCalendar(props: any) {
 
       AllGeneratedevents = [];
       AllGeneratedevents = AllGeneratedevents.concat(calendarEvents);
+
       for (const event of Recurrencedatas) {
-        let allDates = parseRecurrence(event)
-        if (allDates.length > 0) {
-          AllGeneratedevents = AllGeneratedevents.concat(allDates)
+        const instances = parseRecurrence(event);
+        if (instances.length > 0) {
+          AllGeneratedevents = AllGeneratedevents.concat(instances);
         }
       }
-      handleNavigate(currentCalendarDate, currentCalendarView)
+
+      handleNavigate(currentCalendarDate, currentCalendarView);
     } catch (error) {
       hideLoader();
       console.error('Error loading events:', error);
     }
   };
-  /**
-    * Calculate the next date in a recurrence pattern
-    * @param rule Recurrence rule
-    * @param firstDayOfWeek First day of week setting
-    * @param currentDate Current date being processed
-    * @param dates Array of dates already processed
-    * @param endDate End date for recurrence
-    * @param allEvents Array of event objects
-    * @param eventDetails Original event details
-    * @param eventStartDate Original event start date to prevent events before this date
-    * @returns String 'break' if processing should stop, or empty string
-    */
+
+  // ===== RECURRENCE & HELPERS =====
   function parseRecurrence(recurrenceData: any) {
     const dates: Date[] = [];
     const allEvents: any[] = [];
 
     try {
-      // Add global safety counter to prevent excessive processing
       let globalSafetyCounter = 0;
       const GLOBAL_MAX_ITERATIONS = 10000;
 
@@ -246,12 +348,9 @@ export default function ModernCalendar(props: any) {
         const startDate = new Date(recurrenceData?.EventDate);
         let repeatInstance = rule?.repeatInstances ? Number(rule.repeatInstances[0]) : 0;
 
-        // Determine end date for recurrence
         let windowEndDate: Date;
-
         if (rule?.repeatForever && rule?.repeatForever[0] === 'FALSE') {
           if (rule?.windowEnd === undefined) {
-            // If no window end specified, create a reasonable default (1000 days)
             const createEndDate = new Date(recurrenceData?.EndDate);
             createEndDate.setHours(0, 0, 0, 0);
             createEndDate.setDate(createEndDate.getDate() + 1000);
@@ -261,7 +360,6 @@ export default function ModernCalendar(props: any) {
             windowEndDate.setHours(0, 0, 0, 0);
           }
         } else if (repeatInstance > 0) {
-          // Calculate end date based on repeat instances
           const repeatInstanceEndDate = new Date(recurrenceData?.EventDate);
           repeatInstanceEndDate.setHours(0, 0, 0, 0);
 
@@ -282,31 +380,21 @@ export default function ModernCalendar(props: any) {
               repeatInstanceEndDate.setFullYear(repeatInstanceEndDate.getFullYear() + repeatInstance);
               break;
           }
-
           windowEndDate = repeatInstanceEndDate;
         } else {
-          // Use the end date from recurrence data
           windowEndDate = new Date(recurrenceData?.EndDate);
           windowEndDate.setHours(0, 0, 0, 0);
         }
 
-        // Generate recurring events
         let currentDate = new Date(startDate);
-
-        // Important: Check if current date is before the actual event start date
-        // This fixes the bug where events are created before the specified start date
         const eventStartDate = new Date(recurrenceData?.EventDate);
         eventStartDate.setHours(0, 0, 0, 0);
 
-        // FIX: Move the counter check into the loop condition directly
-        // This ensures we only continue if we haven't hit our target repeats
-        // and we're still within the window end date
         while (
           (repeatInstance === 0 || allEvents.length < repeatInstance) &&
           (allEvents.length === 0 || new Date(dates[dates.length - 1]).setHours(0, 0, 0, 0) < windowEndDate.getTime()) &&
           globalSafetyCounter < GLOBAL_MAX_ITERATIONS
         ) {
-          // FIX: Check the return value to properly handle breaking
           const result = calculateNextDate(
             rule,
             firstDayOfWeek,
@@ -316,26 +404,22 @@ export default function ModernCalendar(props: any) {
             allEvents,
             recurrenceData,
             eventStartDate,
-            repeatInstance // Pass required repeat count
+            repeatInstance
           );
 
-          if (result === 'break' || allEvents.length >= repeatInstance && repeatInstance > 0) {
+          if (result === 'break' || (repeatInstance > 0 && allEvents.length >= repeatInstance)) {
             break;
           }
 
-          // FIX: Advance current date to prevent infinite loops
-          // If no dates were added in this iteration, advance by one day to prevent infinite loop
           if (result === 'no-dates-added') {
             currentDate.setDate(currentDate.getDate() + 1);
           }
 
-          // Increment safety counter
           globalSafetyCounter++;
         }
 
-        // Check if we hit the global safety limit
         if (globalSafetyCounter >= GLOBAL_MAX_ITERATIONS) {
-          console.warn("Global safety limit reached in parseRecurrence: possible infinite loop prevented");
+          console.warn("Global safety limit reached in parseRecurrence");
         }
       });
     } catch (error) {
@@ -345,19 +429,6 @@ export default function ModernCalendar(props: any) {
     return allEvents;
   }
 
-  /**
-   * Calculate the next date in a recurrence pattern
-   * @param rule Recurrence rule
-   * @param firstDayOfWeek First day of week setting
-   * @param currentDate Current date being processed
-   * @param dates Array of dates already processed
-   * @param endDate End date for recurrence
-   * @param allEvents Array of event objects
-   * @param eventDetails Original event details
-   * @param eventStartDate Original event start date to prevent events before this date
-   * @param repeatInstance Maximum number of instances to generate
-   * @returns String 'break' if processing should stop, 'no-dates-added' if no dates added, or empty string
-   */
   function calculateNextDate(
     rule: any,
     firstDayOfWeek: string,
@@ -370,28 +441,19 @@ export default function ModernCalendar(props: any) {
     repeatInstance: number
   ): string {
     try {
-      // Safety check to prevent processing dates far beyond the end date
-      if (currentDate.getTime() > endDate.getTime() + (90 * 24 * 60 * 60 * 1000)) { // 90 days grace period
-        console.warn("Date is far beyond end date, stopping recurrence calculation");
+      if (currentDate.getTime() > endDate.getTime() + (90 * 24 * 60 * 60 * 1000)) {
         return 'break';
       }
-
-      // FIX: Check if we've reached max repeat instances
       if (repeatInstance > 0 && allEvents.length >= repeatInstance) {
         return 'break';
       }
 
       const { repeat } = rule;
-      if (!repeat || !repeat[0]) {
-        console.error("Invalid repeat rule structure");
-        return 'break';
-      }
-
+      if (!repeat || !repeat[0]) return 'break';
       const repeatType = Object.keys(repeat[0])[0];
       const frequency = repeat[0][repeatType][0].$;
 
-      // FIX: Store the current length to detect if dates were added
-      const initialLength = allEvents.length;
+      const before = allEvents.length;
 
       switch (repeatType) {
         case 'daily':
@@ -406,7 +468,6 @@ export default function ModernCalendar(props: any) {
             eventStartDate
           );
           break;
-
         case 'weekly':
           handleWeeklyRecurrence(
             frequency,
@@ -418,7 +479,6 @@ export default function ModernCalendar(props: any) {
             eventStartDate
           );
           break;
-
         case 'monthly':
           handleMonthlyRecurrence(
             frequency,
@@ -430,7 +490,6 @@ export default function ModernCalendar(props: any) {
             eventStartDate
           );
           break;
-
         case 'monthlyByDay':
           handleMonthlyByDay(
             frequency,
@@ -442,7 +501,6 @@ export default function ModernCalendar(props: any) {
             eventStartDate
           );
           break;
-
         case 'yearlyByDay':
           handleYearlyByDay(
             frequency,
@@ -454,7 +512,6 @@ export default function ModernCalendar(props: any) {
             eventStartDate
           );
           break;
-
         case 'yearly':
           handleYearlyRecurrence(
             frequency,
@@ -466,35 +523,25 @@ export default function ModernCalendar(props: any) {
             eventStartDate
           );
           break;
-
         default:
-          console.warn(`Unsupported recurrence type: ${repeatType}`);
           return 'break';
       }
 
-      // FIX: Check if any dates were added during this iteration
-      if (allEvents.length === initialLength) {
+      if (allEvents.length === before) {
         return 'no-dates-added';
       }
 
-      // Update the current date to the last date added
       if (dates.length > 0) {
-        // FIX: Move current date forward past the last added date
         currentDate.setTime(dates[dates.length - 1].getTime());
         currentDate.setDate(currentDate.getDate() + 1);
       }
-
     } catch (error) {
       console.error("Date calculation error", error);
-      return 'break'; // Return 'break' on error to prevent further processing
+      return 'break';
     }
-
     return '';
   }
 
-  /**
-   * Handle daily recurrence pattern
-   */
   function handleDailyRecurrence(
     frequency: any,
     currentDate: Date,
@@ -508,18 +555,12 @@ export default function ModernCalendar(props: any) {
     const dayFrequency = parseInt(frequency.dayFrequency);
     let nextDate = new Date(currentDate);
 
-    // If using weekday pattern, handle differently
     if (frequency?.weekday === 'TRUE') {
-      // Create array of weekdays
-      const weekdays = [];
+      const weekdays: Date[] = [];
       let tempDate = new Date(nextDate);
-
-      // Add safety counter to prevent infinite loops
       let safetyCounter = 0;
-      const MAX_ITERATIONS = 10000; // Reasonable upper limit for iterations
+      const MAX_ITERATIONS = 10000;
 
-      // FIX: Get enough weekdays to satisfy the repeat instance or end date
-      // and check against the current allEvents length
       while ((repeatInstance === 0 || allEvents.length + weekdays.length < repeatInstance) &&
         tempDate.getTime() < windowEndDate.getTime() &&
         safetyCounter < MAX_ITERATIONS) {
@@ -527,78 +568,45 @@ export default function ModernCalendar(props: any) {
         tempDate.setDate(tempDate.getDate() + 1);
         const dayOfWeek = tempDate.getDay();
 
-        // Include only weekdays (1-5, Monday through Friday)
         if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-          // Only add dates on or after the start date
           if (tempDate.getTime() >= eventStartDate.getTime()) {
             weekdays.push(new Date(tempDate));
-
-            // FIX: Break early if we've reached the target repeat count
             if (repeatInstance > 0 && allEvents.length + weekdays.length >= repeatInstance) {
               break;
             }
           }
         }
-
-        // Increment safety counter
         safetyCounter++;
       }
 
-      // Check if we hit the safety limit
-      if (safetyCounter >= MAX_ITERATIONS) {
-        console.warn("Safety limit reached in handleDailyRecurrence: possible infinite loop prevented");
-      }
-
-      // Add events for each weekday
       for (const weekday of weekdays) {
         if (weekday.getTime() <= windowEndDate.getTime()) {
           const event = eventDataForBinding(eventDetails, weekday);
           allEvents.push(event);
           dates.push(new Date(weekday));
-
-          // FIX: Break if we've reached the repeat count
-          if (repeatInstance > 0 && allEvents.length >= repeatInstance) {
-            break;
-          }
+          if (repeatInstance > 0 && allEvents.length >= repeatInstance) break;
         }
       }
     } else {
-      // Regular daily pattern
       let safetyCounter = 0;
       const MAX_ITERATIONS = 10000;
 
-      // FIX: Check against allEvents.length directly
       while ((repeatInstance === 0 || allEvents.length < repeatInstance) &&
         safetyCounter < MAX_ITERATIONS) {
         nextDate.setDate(nextDate.getDate() + dayFrequency);
 
-        // Only add dates on or after the start date
         if (nextDate.getTime() >= eventStartDate.getTime() && nextDate.getTime() <= windowEndDate.getTime()) {
           const event = eventDataForBinding(eventDetails, nextDate);
           allEvents.push(event);
           dates.push(new Date(nextDate));
-
-          // FIX: No need for separate count variable
         }
 
-        if (nextDate.getTime() > windowEndDate.getTime()) {
-          break;
-        }
-
-        // Increment safety counter
+        if (nextDate.getTime() > windowEndDate.getTime()) break;
         safetyCounter++;
-      }
-
-      // Check if we hit the safety limit
-      if (safetyCounter >= MAX_ITERATIONS) {
-        console.warn("Safety limit reached in handleDailyRecurrence: possible infinite loop prevented");
       }
     }
   }
 
-  /**
-   * Handle weekly recurrence pattern
-   */
   function handleWeeklyRecurrence(
     frequency: any,
     currentDate: Date,
@@ -612,19 +620,14 @@ export default function ModernCalendar(props: any) {
     const weekFreq = parseInt(weekFrequency);
     const daysOfWeekIndex = ['su', 'mo', 'tu', 'we', 'th', 'fr', 'sa'];
 
-    // Get the days of the week that are marked as TRUE
     const daysOfWeek = daysOfWeekIndex.filter(day => frequency[day] === "TRUE");
-
-    // If no days specified, return
     if (daysOfWeek.length === 0) return;
 
-    // Create a copy of current date to work with
     let baseDate = new Date(currentDate);
     let keepProcessing = true;
 
-    // Add safety counter to prevent infinite loops
     let safetyCounter = 0;
-    const MAX_ITERATIONS = 1000; // Reasonable upper limit for iterations
+    const MAX_ITERATIONS = 1000;
 
     while (keepProcessing && safetyCounter < MAX_ITERATIONS) {
       let addedThisWeek = false;
@@ -632,16 +635,12 @@ export default function ModernCalendar(props: any) {
       for (const day of daysOfWeek) {
         const targetDayIndex = daysOfWeekIndex.indexOf(day);
         let targetDate = new Date(baseDate);
-
-        // Calculate days to add to reach target day in current week
         let daysToAdd = (targetDayIndex - baseDate.getDay() + 7) % 7;
         if (daysToAdd === 0 && targetDayIndex !== baseDate.getDay()) {
           daysToAdd = 7;
         }
-
         targetDate.setDate(baseDate.getDate() + daysToAdd);
 
-        // Check if this date is valid for our recurrence
         if (targetDate.getTime() >= eventStartDate.getTime() &&
           targetDate.getTime() <= windowEndDate.getTime()) {
 
@@ -650,39 +649,21 @@ export default function ModernCalendar(props: any) {
           dates.push(new Date(targetDate));
           addedThisWeek = true;
         }
-
-        // Stop if we've gone past the end date
         if (targetDate.getTime() > windowEndDate.getTime()) {
           keepProcessing = false;
         }
       }
 
-      // If we've added at least one date this week, process the next week
       if (!addedThisWeek && dates.length > 0) {
         keepProcessing = false;
       }
 
-      // Advance to next week based on week frequency
       baseDate.setDate(baseDate.getDate() + (7 * weekFreq));
-
-      // Safety check to prevent infinite loops
-      if (baseDate.getTime() > windowEndDate.getTime()) {
-        keepProcessing = false;
-      }
-
-      // Increment safety counter
+      if (baseDate.getTime() > windowEndDate.getTime()) keepProcessing = false;
       safetyCounter++;
-    }
-
-    // Check if we hit the safety limit
-    if (safetyCounter >= MAX_ITERATIONS) {
-      console.warn("Safety limit reached in handleWeeklyRecurrence: possible infinite loop prevented");
     }
   }
 
-  /**
-   * Handle monthly recurrence pattern
-   */
   function handleMonthlyRecurrence(
     frequency: any,
     currentDate: Date,
@@ -694,55 +675,33 @@ export default function ModernCalendar(props: any) {
   ) {
     const { monthFrequency, dayOfMonth } = frequency;
     const monthFreq = parseInt(monthFrequency);
-
-    // Create a copy of the current date
     let targetDate = new Date(currentDate);
     let day = dayOfMonth || frequency?.day;
-
     if (!day) return;
 
-    // Set day of month
     targetDate.setDate(parseInt(day));
 
-    // Add safety counter
     let safetyCounter = 0;
     const MAX_ITERATIONS = 500;
 
-    // Process monthly recurrences
     while (targetDate.getTime() <= windowEndDate.getTime() && safetyCounter < MAX_ITERATIONS) {
-      // Add event only if it's on or after the start date
       if (targetDate.getTime() >= eventStartDate.getTime()) {
         const event = eventDataForBinding(eventDetails, targetDate);
         allEvents.push(event);
         dates.push(new Date(targetDate));
       }
 
-      // Move to next month based on frequency
       targetDate.setMonth(targetDate.getMonth() + monthFreq);
-
-      // Ensure we maintain the same day of month
-      // Handle special cases like 31st of month in shorter months
       const expectedDay = parseInt(day);
       const actualMonth = targetDate.getMonth();
-      targetDate.setDate(1); // Reset to 1st of month
-      targetDate.setMonth(actualMonth); // Set the correct month
-
-      // Now set the day, clamping to last day of month if needed
+      targetDate.setDate(1);
+      targetDate.setMonth(actualMonth);
       const lastDayOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
       targetDate.setDate(Math.min(expectedDay, lastDayOfMonth));
-
-      // Increment safety counter
       safetyCounter++;
-    }
-
-    if (safetyCounter >= MAX_ITERATIONS) {
-      console.warn("Safety limit reached in handleMonthlyRecurrence: possible infinite loop prevented");
     }
   }
 
-  /**
-   * Handle monthly by day recurrence pattern
-   */
   function handleMonthlyByDay(
     frequency: any,
     currentDate: Date,
@@ -756,53 +715,43 @@ export default function ModernCalendar(props: any) {
     const daysOfWeekIndex = ['su', 'mo', 'tu', 'we', 'th', 'fr', 'sa'];
     const weekMap: any = { first: 1, second: 2, third: 3, fourth: 4, last: 5 };
     const monthFreq = parseInt(monthFrequency);
-
     let targetDate = new Date(currentDate);
 
-    // Add safety counter to prevent infinite loops
     let safetyCounter = 0;
-    const MAX_ITERATIONS = 500; // Reasonable upper limit for iterations
+    const MAX_ITERATIONS = 500;
 
-    // Process recurrence until we reach the end date
     while (targetDate.getTime() <= windowEndDate.getTime() && safetyCounter < MAX_ITERATIONS) {
       let specificDate: Date | null = null;
 
       if (frequency?.day === "TRUE") {
-        // Handle specific day of the month
         specificDate = new Date(
           targetDate.getFullYear(),
           targetDate.getMonth(),
           weekMap[weekdayOfMonth]
         );
       } else if (frequency?.weekday === "TRUE") {
-        // Handle weekdays
-        // Find the nth weekday of the month
         specificDate = getNthWeekdayOfMonth(
           targetDate.getFullYear(),
           targetDate.getMonth(),
-          [1, 2, 3, 4, 5], // Monday to Friday
+          [1, 2, 3, 4, 5],
           weekMap[weekdayOfMonth]
         );
       } else if (frequency?.weekend_day === "TRUE") {
-        // Handle weekend days
         specificDate = getNthWeekdayOfMonth(
           targetDate.getFullYear(),
           targetDate.getMonth(),
-          [0, 6], // Sunday and Saturday
+          [0, 6],
           weekMap[weekdayOfMonth]
         );
       } else {
-        // Handle specific days of the week
         const keys = Object.keys(frequency);
-        const dayIndices = [];
-
+        const dayIndices: number[] = [];
         for (let i = 0; i < daysOfWeekIndex.length; i++) {
           const key = daysOfWeekIndex[i];
           if (keys.includes(key) && frequency[key] === "TRUE") {
             dayIndices.push(i);
           }
         }
-
         specificDate = getNthWeekdayOfMonth(
           targetDate.getFullYear(),
           targetDate.getMonth(),
@@ -811,7 +760,6 @@ export default function ModernCalendar(props: any) {
         );
       }
 
-      // Add event if date is valid
       if (specificDate &&
         specificDate.getTime() >= eventStartDate.getTime() &&
         specificDate.getTime() <= windowEndDate.getTime()) {
@@ -820,124 +768,70 @@ export default function ModernCalendar(props: any) {
         dates.push(new Date(specificDate));
       }
 
-      // Advance to next month
       targetDate.setMonth(targetDate.getMonth() + monthFreq);
-
-      // Increment safety counter
       safetyCounter++;
-    }
-
-    // Check if we hit the safety limit
-    if (safetyCounter >= MAX_ITERATIONS) {
-      console.warn("Safety limit reached in handleMonthlyByDay: possible infinite loop prevented");
     }
   }
 
-  /**
-   * Get the nth occurrence of a weekday in a month
-   */
   function getNthWeekdayOfMonth(
     year: number,
     month: number,
     dayIndices: number[],
     nth: number
   ): Date | null {
-    if (nth === 5) { // "last" occurrence
-      return getLastWeekdayOfMonth(year, month, dayIndices);
-    }
+    if (nth === 5) return getLastWeekdayOfMonth(year, month, dayIndices);
 
-    // Get first day of month
     const firstDayOfMonth = new Date(year, month, 1);
-
-    // Find occurrences of the specified weekdays
-    const occurrences = [];
-    let currentDate = new Date(firstDayOfMonth);
-
-    // Find first occurrence of each day
+    const occurrences: Date[] = [];
     for (const dayIndex of dayIndices) {
       let daysToAdd = (dayIndex - firstDayOfMonth.getDay() + 7) % 7;
       if (daysToAdd === 0 && dayIndex !== firstDayOfMonth.getDay()) {
         daysToAdd = 7;
       }
-
-      const firstOccurrence = new Date(year, month, 1 + daysToAdd);
-      occurrences.push(firstOccurrence);
+      occurrences.push(new Date(year, month, 1 + daysToAdd));
     }
-
-    // Sort by date
     occurrences.sort((a, b) => a.getTime() - b.getTime());
 
-    // Safety check: if no occurrences found, return null
-    if (occurrences.length === 0) {
-      return null;
-    }
+    if (occurrences.length === 0) return null;
 
-    // Find the nth occurrence of any of the specified weekdays
     let count = 1;
     let lastDate = occurrences[0];
 
-    // Add safety counter to prevent infinite loops
     let safetyCounter = 0;
-    const MAX_ITERATIONS = 100; // Reasonable upper limit for iterations
+    const MAX_ITERATIONS = 100;
 
     while (count < nth && safetyCounter < MAX_ITERATIONS) {
-      // Find next occurrences
-      const nextOccurrences = [];
-
+      const nextOccurrences: Date[] = [];
       for (const date of occurrences) {
         const nextDate: any = new Date(date);
         nextDate.setDate(nextDate.getDate() + 7);
-
-        // Only include if still in the same month
-        if (nextDate.getMonth() === month) {
-          nextOccurrences.push(nextDate);
-        }
+        if (nextDate.getMonth() === month) nextOccurrences.push(nextDate);
       }
-
-      if (nextOccurrences.length === 0) {
-        // No more occurrences this month
-        break;
-      }
+      if (nextOccurrences.length === 0) break;
 
       occurrences.length = 0;
       occurrences.push(...nextOccurrences);
       occurrences.sort((a, b) => a.getTime() - b.getTime());
-
       lastDate = occurrences[0];
       count++;
-
-      // Increment safety counter
       safetyCounter++;
     }
 
-    // Check if we hit the safety limit
-    if (safetyCounter >= MAX_ITERATIONS) {
-      console.warn("Safety limit reached in getNthWeekdayOfMonth: possible infinite loop prevented");
-      return null;
-    }
-
+    if (safetyCounter >= MAX_ITERATIONS) return null;
     return lastDate;
   }
 
-  /**
-   * Get the last occurrence of specified weekdays in a month
-   */
   function getLastWeekdayOfMonth(
     year: number,
     month: number,
     dayIndices: number[]
   ): Date {
-    // Get last day of month
     const lastDayOfMonth = new Date(year, month + 1, 0);
     const daysInMonth = lastDayOfMonth.getDate();
-
-    // Find the last occurrence of the specified weekdays
-    const lastOccurrences = [];
+    const lastOccurrences: Date[] = [];
 
     for (const dayIndex of dayIndices) {
       let day = daysInMonth;
-
-      // Start from the end of the month and work backwards
       while (day > 0) {
         const date = new Date(year, month, day);
         if (date.getDay() === dayIndex) {
@@ -947,16 +841,10 @@ export default function ModernCalendar(props: any) {
         day--;
       }
     }
-
-    // Sort by date (descending to get the latest)
     lastOccurrences.sort((a, b) => b.getTime() - a.getTime());
-
     return lastOccurrences[0];
   }
 
-  /**
-   * Handle yearly recurrence pattern
-   */
   function handleYearlyRecurrence(
     frequency: any,
     currentDate: Date,
@@ -968,40 +856,24 @@ export default function ModernCalendar(props: any) {
   ) {
     const { yearFrequency, month, day } = frequency;
     const yearFreq = parseInt(yearFrequency);
-
-    // Create date for the recurring event
     let targetDate = new Date(currentDate);
-    targetDate.setMonth(parseInt(month) - 1); // Month is 1-based in SharePoint
+    targetDate.setMonth(parseInt(month) - 1);
     targetDate.setDate(parseInt(day));
 
-    // Add safety counter
     let safetyCounter = 0;
     const MAX_ITERATIONS = 200;
 
-    // Process yearly recurrences
     while (targetDate.getTime() <= windowEndDate.getTime() && safetyCounter < MAX_ITERATIONS) {
-      // Add event if it's on or after the start date
       if (targetDate.getTime() >= eventStartDate.getTime()) {
         const event = eventDataForBinding(eventDetails, targetDate);
         allEvents.push(event);
         dates.push(new Date(targetDate));
       }
-
-      // Advance to next year
       targetDate.setFullYear(targetDate.getFullYear() + yearFreq);
-
-      // Increment safety counter
       safetyCounter++;
-    }
-
-    if (safetyCounter >= MAX_ITERATIONS) {
-      console.warn("Safety limit reached in handleYearlyRecurrence: possible infinite loop prevented");
     }
   }
 
-  /**
-   * Handle yearly by day recurrence pattern
-   */
   function handleYearlyByDay(
     frequency: any,
     currentDate: Date,
@@ -1017,51 +889,43 @@ export default function ModernCalendar(props: any) {
     const yearFreq = parseInt(yearFrequency);
 
     let targetYear = currentDate.getFullYear();
-    const targetMonth = parseInt(month) - 1; // Month is 1-based in SharePoint
+    const targetMonth = parseInt(month) - 1;
 
-    // Add safety counter to prevent infinite loops
     let safetyCounter = 0;
-    const MAX_ITERATIONS = 200; // Reasonable upper limit for iterations
+    const MAX_ITERATIONS = 200;
 
-    // Process yearly recurrences
     while (safetyCounter < MAX_ITERATIONS) {
       let specificDate: Date | null = null;
 
       if (frequency?.day === "TRUE") {
-        // Handle specific day of the month
         specificDate = new Date(
           targetYear,
           targetMonth,
           weekMap[weekdayOfMonth]
         );
       } else if (frequency?.weekday === "TRUE") {
-        // Handle weekdays
         specificDate = getNthWeekdayOfMonth(
           targetYear,
           targetMonth,
-          [1, 2, 3, 4, 5], // Monday to Friday
+          [1, 2, 3, 4, 5],
           weekMap[weekdayOfMonth]
         );
       } else if (frequency?.weekend_day === "TRUE") {
-        // Handle weekend days
         specificDate = getNthWeekdayOfMonth(
           targetYear,
           targetMonth,
-          [0, 6], // Sunday and Saturday
+          [0, 6],
           weekMap[weekdayOfMonth]
         );
       } else {
-        // Handle specific days of the week
         const keys = Object.keys(frequency);
-        const dayIndices = [];
-
+        const dayIndices: number[] = [];
         for (let i = 0; i < daysOfWeekIndex.length; i++) {
           const key = daysOfWeekIndex[i];
           if (keys.includes(key) && frequency[key] === "TRUE") {
             dayIndices.push(i);
           }
         }
-
         specificDate = getNthWeekdayOfMonth(
           targetYear,
           targetMonth,
@@ -1070,72 +934,83 @@ export default function ModernCalendar(props: any) {
         );
       }
 
-      // Check if we've gone past the end date or if specificDate is null
-      if (!specificDate || specificDate.getTime() > windowEndDate.getTime()) {
-        break;
-      }
+      if (!specificDate || specificDate.getTime() > windowEndDate.getTime()) break;
 
-      // Add event if it's on or after the start date
       if (specificDate.getTime() >= eventStartDate.getTime()) {
         const event = eventDataForBinding(eventDetails, specificDate);
         allEvents.push(event);
         dates.push(new Date(specificDate));
       }
 
-      // Advance to next year
       targetYear += yearFreq;
-
-      // Increment safety counter
       safetyCounter++;
     }
-
-    /**
-     * Handle yearly by day recurrence pattern
-     */
-
   }
 
-  // Check if user can edit a specific event
+  function getCategoryColors(category: string, isTrainingLocal: boolean) {
+    if (isTrainingLocal) {
+      return {
+        Color: categoryOptionsColorTraining[category] ?? '#605e5c',
+        FontColor: categoryOptionsFontColorTraining[category] ?? '#ffffff',
+      };
+    } else {
+      return {
+        Color: categoryOptionsColor[category] ?? '#605e5c',
+        FontColor: categoryOptionsFontColor[category] ?? '#ffffff',
+      };
+    }
+  }
+
+  function eventDataForBinding(eventDetails: any, currentDate: Date) {
+    const isTrainingLocal = calendarTitle === 'Company Calendar';
+    const raw = (eventDetails?.Category && String(eventDetails.Category).trim()) ? String(eventDetails.Category) : NA_CATEGORY;
+    const normCat = raw;
+    const { Color, FontColor } = getCategoryColors(normCat, isTrainingLocal);
+
+    return {
+      ...eventDetails,
+      id: eventDetails.Id,
+      EndDate: new Date(currentDate).toISOString(),
+      EventDate: new Date(currentDate).toISOString(),
+      title: eventDetails.Title,
+      start: new Date(currentDate),
+      end: new Date(currentDate),
+      startTime: new Date(currentDate),
+      endTime: new Date(currentDate),
+      RecurrenceData: eventDetails.RecurrenceData,
+      Color,
+      FontColor,
+      category: normCat,
+    };
+  }
+
   const canEditEvent = (event: ICalendarEvent): boolean => {
     if (!userPermissions.canEdit) return false;
-
-    // User can edit if they have edit permissions and either:
-    // 1. They are the creator of the event, OR
-    // 2. They have full edit permissions (admin/owner)
     return userPermissions.canEdit && (
       !event.createdBy ||
       event.createdBy.Id === currentUserId ||
-      userPermissions.canDelete // Assuming delete permission means full access
+      userPermissions.canDelete
     );
   };
 
-  // Check if user can delete a specific event
   const canDeleteEvent = (event: ICalendarEvent): boolean => {
     if (!userPermissions.canDelete) return false;
-
-    // User can delete if they have delete permissions and either:
-    // 1. They are the creator of the event, OR
-    // 2. They have full delete permissions (admin/owner)
     return userPermissions.canDelete && (
       !event.createdBy ||
       event.createdBy.Id === currentUserId ||
-      userPermissions.canDelete // Full delete access
+      userPermissions.canDelete
     );
   };
 
   const handleSelectEvent = (event: ICalendarEvent) => {
-    // Only allow viewing/editing if user has permissions
     if (!userPermissions.canView) return;
-
     setSelectedEvent(event);
     setIsNewEvent(false);
     setShowModal(true);
   };
 
   const handleSelectSlot = ({ start, end }: { start: Date; end: Date }) => {
-    // Only allow creating new events if user has add permission
     if (!userPermissions.canAdd) return;
-
     const newEvent: ICalendarEvent = {
       id: '',
       title: '',
@@ -1144,7 +1019,7 @@ export default function ModernCalendar(props: any) {
       endTime: end,
       description: '',
       attendees: [],
-      category: '',
+      category: NA_CATEGORY, // default to N/A to keep consistency
       resources: '',
       freeBusy: 'Busy',
       checkDoubleBooking: false,
@@ -1159,126 +1034,31 @@ export default function ModernCalendar(props: any) {
     setShowModal(true);
   };
 
-  const categoryOptionsColor: any = {
-    'Meeting': '#3174ad',
-    'RFQ': '#ffff00',
-    'RFP': '#107c10',
-    'CSP/Traditional': '#da3b01',
-    'DB': '#c239b3',
-    'Interview': '#adadad',
-    'Appointment': '#0099bc',
-    'Site Visit': '#00b294',
-    'Remote': '#004e8c',
-    'Interview Prep': '#ffaa44',
-    'Other': '#605e5c',
-    'PTO': '#e3008c'
-  };
-  const categoryOptionsColorTraining: any = {
-    'Safety': '#ff0000',
-    'Ops': '#3174ad',
-    'HR': '#107c10',
-    'Other': '#ffff00',
-  };
-  const categoryOptionsFontColorTraining: any = {
-    'Safety': '#ffffff',
-     'Ops': '#ffffff',
-    'HR': '#ffffff',
-    'Other': '#000000',
-  };
-  const categoryOptionsFontColor: any = {
-    'Meeting': '#fff',
-    'RFQ': '#000000',
-    'RFP': '#fff',
-    'CSP/Traditional': '#fff',
-    'DB': '#fff',
-    'Interview': '#000000',
-    'Appointment': '#fff',
-    'Site Visit': '#000',
-    'Interview Prep': '#000',
-    'Other': '#fff',
-    'Remote': '#fff',
-    'PTO': '#fff'
-  };
-
-  // Helper to get color/fontColor based on calendar type
-  function getCategoryColors(category: string, isTraining: boolean) {
-    if (isTraining) {
-      return {
-        Color: categoryOptionsColorTraining[category] ? categoryOptionsColorTraining[category] : '#3174ad',
-        FontColor: categoryOptionsFontColorTraining[category] ? categoryOptionsFontColorTraining[category] : '#fff',
-      };
-    } else {
-      return {
-        Color: categoryOptionsColor[category] ? categoryOptionsColor[category] : '#3174ad',
-        FontColor: categoryOptionsFontColor[category] ? categoryOptionsFontColor[category] : '#fff',
-      };
-    }
-  }
-
-  // Update eventDataForBinding to use getCategoryColors
-  function eventDataForBinding(eventDetails: any, currentDate: Date) {
-    const isTraining = props?.CalendarTitle == 'Company Calendar';
-    const { Color, FontColor } = getCategoryColors(eventDetails?.Category, isTraining);
-    return {
-      ...eventDetails,
-      id: eventDetails.Id,
-      EndDate: new Date(currentDate).toISOString(),
-      EventDate: new Date(currentDate).toISOString(),
-      title: eventDetails.Title,
-      start: new Date(currentDate),
-      end: new Date(currentDate),
-      startTime: new Date(currentDate),
-      endTime: new Date(currentDate),
-      RecurrenceData: eventDetails.RecurrenceData,
-      Color,
-      FontColor,
-    };
-  }
-
   const saveEvent = (event: ICalendarEvent) => {
-    if (isNewEvent && !userPermissions.canAdd) {
-      console.warn('User does not have permission to add events');
-      return;
-    }
-
-    if (!isNewEvent && !canEditEvent(event)) {
-      console.warn('User does not have permission to edit this event');
-      return;
-    }
-
-    if (isNewEvent) {
-      createEvent(event);
-    } else {
-      updateEvent(event);
-    }
+    if (isNewEvent && !userPermissions.canAdd) return;
+    if (!isNewEvent && !canEditEvent(event)) return;
+    if (isNewEvent) createEvent(event);
+    else updateEvent(event);
     setShowModal(false);
   };
 
   const createEvent = async (event: ICalendarEvent) => {
-    if (!userPermissions.canAdd) {
-      console.warn('User does not have permission to add events');
-      return;
-    }
+    if (!userPermissions.canAdd) return;
     showLoader('Loading...');
+    // add your create logic...
     loadEvents();
   };
 
   const updateEvent = async (event: ICalendarEvent) => {
-    if (!canEditEvent(event)) {
-      console.warn('User does not have permission to edit this event');
-      return;
-    }
+    if (!canEditEvent(event)) return;
     showLoader('Loading...');
+    // add your update logic...
     loadEvents();
   };
 
   const deleteEvent = async (eventId: string) => {
     const event = events.find(e => e.id === eventId);
-    if (!event || !canDeleteEvent(event)) {
-      console.warn('User does not have permission to delete this event');
-      return;
-    }
-
+    if (!event || !canDeleteEvent(event)) return;
     try {
       await sp.web.lists.getById(props.MarketingCalendarId).items.getById(parseInt(eventId)).recycle();
       loadEvents();
@@ -1307,114 +1087,49 @@ export default function ModernCalendar(props: any) {
       const daysToAdd = 7 - end.getDay();
       end.setDate(end.getDate() + (daysToAdd === 7 ? 0 : daysToAdd));
 
-      const filteredEvents = AllGeneratedevents.filter((event: ICalendarEvent) => {
+      const filtered = AllGeneratedevents.filter((event: ICalendarEvent) => {
         return event.startTime <= end && event.endTime >= start;
       });
       hideLoader();
-      setEvents(filteredEvents);
+      setEvents(filtered);
     } else {
       hideLoader();
       setEvents(AllGeneratedevents);
     }
   };
 
-  const handleShowMoreEvents = (events: ICalendarEvent[], date: Date) => {
-    setSelectedDateEvents(events);
+  const handleShowMoreEvents = (eventsForDate: ICalendarEvent[], date: Date) => {
+    setSelectedDateEvents(eventsForDate);
     setSelectedDate(date);
     setShowDatePanel(true);
   };
 
-  const CustomDateCell = ({ date, events }: { date: Date, events: ICalendarEvent[] }) => {
-    const hasMoreEvents = events.length > 3;
-    const displayEvents = hasMoreEvents ? events.slice(0, 2) : events;
-    const moreEventsCount = hasMoreEvents ? events.length - 2 : 0;
-
-    return (
-      <div className="rbc-day-events-container">
-        {displayEvents.map((event, index) => (
-          <div
-            key={`${event.id}-${index}`}
-            className="rbc-event-preview"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (userPermissions.canView) {
-                handleSelectEvent(event);
-              }
-            }}
-            style={{ cursor: userPermissions.canView ? 'pointer' : 'default' }}
-          >
-            <div className="event-title">
-              {event.fAllDayEvent ? (
-                <span>{event.title}</span>
-              ) : (
-                <>
-                  <span className="event-time">
-                    {format(event.startTime, 'h:mm a')} - {format(event.endTime, 'h:mm a')}
-                  </span>
-                  <span className="event-title-text">{event.title}</span>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {hasMoreEvents && (
-          <div
-            className="rbc-show-more"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (userPermissions.canView) {
-                handleShowMoreEvents(events, date);
-              }
-            }}
-            style={{ cursor: userPermissions.canView ? 'pointer' : 'default' }}
-          >
-            +{moreEventsCount} more
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderPanelEvent = (item: ICalendarEvent) => {
-    return (
-      <div
-        className="panel-event"
-        onClick={() => {
-          if (userPermissions.canView) {
-            setShowDatePanel(false);
-            handleSelectEvent(item);
-          }
-        }}
-        style={{ cursor: userPermissions.canView ? 'pointer' : 'default' }}
-      >
-        {item.fAllDayEvent ? (
-          <span className="event-title">{item.title} (All day)</span>
-        ) : (
-          <div>
-            <span style={{ fontSize: 'small', display: 'block' }}>
-              {format(item.startTime, 'h:mm a')} - {format(item.endTime, 'h:mm a')}
-            </span>
-            <span style={{ fontSize: 'medium' }}>{item.title}</span>
-            {item.locations && <span style={{ fontSize: 'small', display: 'block' }}>Location: {item.locations}</span>}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const getEventsForDate = (date: Date) => {
-    const day = date?.getDate();
-    const month = date?.getMonth();
-    const year = date?.getFullYear();
-
-    return events?.filter(event => {
-      const eventStart = new Date(event?.startTime);
-      const eventEnd = new Date(event?.endTime);
-      const eventDate = new Date(year, month, day);
-      return eventStart <= eventDate && eventEnd >= eventDate;
-    });
-  };
+  const panelColumns: IColumn[] = React.useMemo(() => [
+    {
+      key: 'time',
+      name: 'Time',
+      minWidth: 120,
+      onRender: (item: ICalendarEvent) => {
+        if (item.fAllDayEvent) return 'All day';
+        const start = format(new Date(item.startTime), 'h:mm a');
+        const end = format(new Date(item.endTime), 'h:mm a');
+        return `${start} - ${end}`;
+      }
+    },
+    {
+      key: 'title',
+      name: 'Title',
+      minWidth: 200,
+      fieldName: 'title',
+      isMultiline: true
+    },
+    {
+      key: 'location',
+      name: 'Location',
+      minWidth: 180,
+      onRender: (item: ICalendarEvent) => item.locations || ''
+    }
+  ], []);
 
   const components = {
     month: {
@@ -1441,7 +1156,7 @@ export default function ModernCalendar(props: any) {
     eventWrapper: ({ children }: any) => <>{children}</>,
   };
 
-  const eventStyleGetter = (event: any, start: any, end: any, isSelected: any) => {
+  const eventStyleGetter = (event: any) => {
     const style = {
       backgroundColor: event.Color,
       borderRadius: "0px",
@@ -1450,51 +1165,95 @@ export default function ModernCalendar(props: any) {
       border: "0px",
       display: "block",
     };
-    return {
-      style,
-    };
+    return { style };
   };
 
-  // Don't render calendar if user doesn't have view permission
   if (!userPermissions.canView) {
     return (
       <div className={'modernCalendar'}>
-       
-              <h2>{props?.CalendarTitle}</h2>
-              <div style={{ padding: '20px', textAlign: 'center' }}>
-                <p>You don't have permission to view this calendar.</p>
-              </div>
-
+        <h2>{calendarTitle}</h2>
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <p>You don't have permission to view this calendar.</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className={'modernCalendar'}>
-     
-            <h2>{props?.CalendarTitle}</h2>
-            <div className={'calendarContainer'}>
-              <Calendar
-                localizer={localizer}
-                events={events.map(event => ({
-                  ...event,
-                  start: event.startTime,
-                  end: event.endTime
-                }))}
-                eventPropGetter={eventStyleGetter}
-                startAccessor="startTime"
-                endAccessor="endTime"
-                titleAccessor="title"
-                style={{ height: 600 }}
-                selectable={userPermissions.canAdd} // Only allow selection if user can add
-                onSelectEvent={handleSelectEvent}
-                onSelectSlot={userPermissions.canAdd ? handleSelectSlot : undefined} // Only allow slot selection if user can add
-                onNavigate={handleNavigate}
-                views={['month', 'week', 'day', 'agenda']}
-                components={components}
-              />
-            
+      <h2>{calendarTitle}</h2>
+
+      {/* CATEGORY FILTER BAR */}
+      <div style={{ margin: '12px 0', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* All toggle */}
+        <Checkbox
+          label="All"
+          checked={selectedCategories.size === categoryList.length}
+          onChange={(_, checked) => {
+            if (checked) setSelectedCategories(new Set(categoryList));
+            else setSelectedCategories(new Set());
+          }}
+        />
+        {/* Individual category checkboxes */}
+        {categoryList.map(cat => {
+          const palette = categoryPalette[cat] || { bg: '#3174ad', fg: '#fff' };
+          const isChecked = selectedCategories.has(cat);
+          return (
+            <Checkbox
+              key={cat}
+              label={cat}
+              checked={isChecked}
+              onChange={(_, checked) => {
+                setSelectedCategories(prev => {
+                  const next = new Set(prev);
+                  if (checked) next.add(cat);
+                  else next.delete(cat);
+                  return next;
+                });
+              }}
+              styles={{
+                root: { alignItems: 'center' },
+                checkbox: {
+                  width: 18,
+                  height: 18,
+                  borderRadius: 4,
+                  borderColor: palette.bg,
+                  background: isChecked ? palette.bg : 'transparent',
+                },
+                checkmark: { color: palette.fg },
+                text: { marginInlineStart: 8 }
+              }}
+            />
+          );
+        })}
       </div>
+
+      <div className={'calendarContainer'}>
+        <Calendar
+          localizer={localizer}
+          events={filteredEvents.map(e => ({ ...e, start: e.startTime, end: e.endTime }))}
+          eventPropGetter={eventStyleGetter}
+          popup={false}
+          onShowMore={(dayEvents, date) => {
+            if (userPermissions.canView) {
+              handleShowMoreEvents(dayEvents as ICalendarEvent[], date);
+            }
+          }}
+          drilldownView={null as any}
+          onDrillDown={() => {}}
+          startAccessor="startTime"
+          endAccessor="endTime"
+          titleAccessor="title"
+          style={{ height: 600 }}
+          selectable={userPermissions.canAdd}
+          onSelectEvent={handleSelectEvent}
+          onSelectSlot={userPermissions.canAdd ? handleSelectSlot : undefined}
+          onNavigate={handleNavigate}
+          views={['month', 'week', 'day', 'agenda']}
+          components={components}
+        />
+      </div>
+
       {showModal && (
         <EventForm
           event={selectedEvent}
@@ -1502,25 +1261,39 @@ export default function ModernCalendar(props: any) {
           onSave={saveEvent}
           onDelete={deleteEvent}
           Context={props?.Context}
-          CalendarTitle={props?.CalendarTitle}
+          CalendarTitle={calendarTitle}
           MarketingCalendarId={props?.MarketingCalendarId}
           onCancel={() => setShowModal(false)}
-          // Pass permission props to EventForm
           userPermissions={userPermissions}
           canEditEvent={selectedEvent ? canEditEvent(selectedEvent) : false}
           canDeleteEvent={selectedEvent ? canDeleteEvent(selectedEvent) : false}
           siteUrl={props?.siteUrl}
         />
       )}
+
       <Panel
         isOpen={showDatePanel}
-        onDismiss={() => setShowDatePanel(false)}
+        onDismiss={() => {
+          setShowDatePanel(false);
+          setSelectedDate(null);
+          setSelectedDateEvents([]);
+        }}
         headerText={selectedDate ? `Events for ${format(selectedDate, 'MMMM d, yyyy')}` : 'Events'}
         type={PanelType.medium}
       >
-        <List
+        <DetailsList
           items={selectedDateEvents}
-          onRenderCell={renderPanelEvent}
+          columns={panelColumns}
+          selectionMode={SelectionMode.none}
+          layoutMode={DetailsListLayoutMode.justified}
+          setKey="dateEvents"
+          compact={true}
+          onItemInvoked={(item) => {
+            if (userPermissions.canView) {
+              setShowDatePanel(false);
+              handleSelectEvent(item as ICalendarEvent);
+            }
+          }}
         />
       </Panel>
     </div>
