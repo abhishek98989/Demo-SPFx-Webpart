@@ -11,6 +11,7 @@ import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import * as strings from 'LearnerBlogPostWebPartStrings';
 import LearnerBlogPost from './components/LearnerBlogPost';
 import { ILearnerBlogPostProps } from './components/ILearnerBlogPostProps';
+import { SPComponentLoader } from '@microsoft/sp-loader';
 
 export interface ILearnerBlogPostWebPartProps {
   description: string;
@@ -24,6 +25,7 @@ export default class LearnerBlogPostWebPart extends BaseClientSideWebPart<ILearn
   private _environmentMessage: string = '';
 
   public render(): void {
+     SPComponentLoader.loadCss("https://vaughnconstruction.sharepoint.com/SiteAssets/css/ModernSPFxStyle.css");
     const element: React.ReactElement<ILearnerBlogPostProps> = React.createElement(
       LearnerBlogPost,
       {

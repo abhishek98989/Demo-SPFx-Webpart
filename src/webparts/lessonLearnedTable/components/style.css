@@ -16,8 +16,6 @@
   align-self: flex-start;
   max-height: calc(100vh - 40px);
   overflow-y: auto;
-  background: #fff;
-  border-right: 1px solid #e5e5e5;
   padding-right: 8px;
 }
 
@@ -39,7 +37,6 @@
   position: sticky;
   top: 0;
   z-index: 30;
-  background: #fff;
   padding: 8px 0 8px 0;
   border-bottom: 1px solid #e5e5e5;
 }
@@ -57,7 +54,6 @@
   position: sticky;
   top: 0; /* it will sit right under the .sticky-header */
   z-index: 25;
-  background: #fff;
 }
 
 /* blog cards look nicer with a little spacing */
@@ -83,4 +79,46 @@
 }
 #spLeftNav{
     display: none !important;
+}
+
+/* Unify table & CSI filter typography with fixed values */
+.blogs-table-layout,
+.blogs-table-layout .ms-DetailsList,
+.blogs-table-layout .ms-DetailsHeader,
+.blogs-table-layout .ms-DetailsRow,
+.blogs-table-layout .ms-DetailsRow-cell,
+.csi-panel,
+.csi-panel .ms-core-listMenu-item,
+.csi-panel .ms-link {
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Roboto",
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 20px;
+  font-style: normal;
+  color: #323130;
+}
+
+/* Make headers & CSI titles semibold */
+.blogs-table-layout .ms-DetailsHeader,
+.blogs-table-layout .ms-DetailsHeader .ms-DetailsHeader-cellTitle,
+.csi-panel .ms-core-listMenu-item {
+  font-weight: 600;
+}
+
+/* Left filter look */
+.csi-panel .ms-link {
+  display: inline-block;
+  padding: 3px 0;
+  text-decoration: none;
+  color: #323130;
+  font-weight: 400;
+}
+.csi-panel .ms-link:hover {
+  text-decoration: underline;
+}
+
+/* Table rows consistent */
+.blogs-table-layout .ms-DetailsRow-cell {
+  padding: 8px 12px;
+  vertical-align: middle;
 }

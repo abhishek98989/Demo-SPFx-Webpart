@@ -3,7 +3,7 @@
   "solution": {
     "name": "vaughnconstruction-client-side-solution",
     "id": "54e514dc-bbf4-4a3b-8381-6f9ef6086431",
-    "version": "1.0.0.0",
+    "version": "1.0.0.2",
     "includeClientSideAssets": true,
     "skipFeatureDeployment": true,
     "isDomainIsolated": false,

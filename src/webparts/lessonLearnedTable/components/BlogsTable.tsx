@@ -1,20 +1,14 @@
 import * as React from "react";
-import './style.css'
+import "./style.css";
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
   TextField,
   Stack,
-  Label,
   IconButton,
   Spinner,
   Text,
-  Panel,
-  PanelType,
-  Dropdown,
-  IDropdownOption,
-  PrimaryButton,
-  DefaultButton,
   TooltipHost,
+  PrimaryButton,
 } from "@fluentui/react";
 import {
   DetailsList,
@@ -25,7 +19,8 @@ import {
 import { spfi, SPFx } from "@pnp/sp/presets/all";
 import DOMPurify from "dompurify";
 import "../../../globalCommon/style.css";
-
+import "@pnp/sp/security";
+import { PermissionKind } from "@pnp/sp/security";
 interface IBlogPost {
   Id: number;
   Title: string;
@@ -36,7 +31,8 @@ interface IBlogPost {
   PublishedTime: string;
   Url: string;
   Body: string;
-  Contact?: { Id: number; Title: string } | null;
+  // FIX: contact is multi-lookup
+  Contact?: { Id: number; Title: string }[];
   CSIDivisions?: { Id: number; Title: string }[];
 }
 
@@ -52,7 +48,7 @@ const BlogsTable = (props: any) => {
   const [allPosts, setAllPosts] = useState<IBlogPost[]>([]);
   const [visiblePosts, setVisiblePosts] = useState<IBlogPost[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-
+  const [canEdit, setCanEdit] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchResults, setSearchResults] = useState<number[]>([]);
   const [currentResultIndex, setCurrentResultIndex] = useState<number>(0);
@@ -81,12 +77,6 @@ const BlogsTable = (props: any) => {
     isSortedDescending: true,
   });
 
-  // edit panel
-  const [isEditOpen, setIsEditOpen] = useState<boolean>(false);
-  const [editItem, setEditItem] = useState<IBlogPost | null>(null);
-  const [editTitle, setEditTitle] = useState<string>("");
-  const [editCsiDivisions, setEditCsiDivisions] = useState<number[]>([]);
-
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loaderRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -102,9 +92,15 @@ const BlogsTable = (props: any) => {
   // fetch posts (CSI-based)
   const fetchPosts = async (sp: any) => {
     try {
-      const params = new URLSearchParams(window.location.search);
-      const postFilter = params.get("PostId");
-
+        const list = sp.web.lists.getById(ListIds?.posts);
+                 try{
+                         const perms = await list.getCurrentUserEffectivePermissions();
+                        if (sp.web.hasPermissions(perms, PermissionKind.EditListItems)) {
+                            setCanEdit(true);
+                        }
+                 }catch(err){
+console.error("Error checking permissions:", err);
+                 }
       const items = await sp.web.lists
         .getById(ListIds?.posts)
         .items.select(
@@ -134,6 +130,19 @@ const BlogsTable = (props: any) => {
         hours = hours % 12 || 12;
         const time = `${hours}:${minutes} ${ampm}`;
 
+        // FIX: normalize multi-lookup Contact
+        let contacts: { Id: number; Title: string }[] = [];
+        if (item.Contact) {
+          if (Array.isArray(item.Contact)) {
+            contacts = item.Contact.map((c: any) => ({
+              Id: c.Id,
+              Title: c.Title,
+            }));
+          } else {
+            contacts = [{ Id: item.Contact.Id, Title: item.Contact.Title }];
+          }
+        }
+
         return {
           Id: item.Id,
           Title: item.Title || "",
@@ -144,9 +153,7 @@ const BlogsTable = (props: any) => {
           PublishedTime: time,
           Url: item.EncodedAbsUrl || "",
           Body: item.Body || "",
-          Contact: item.Contact
-            ? { Id: item.Contact.Id, Title: item.Contact.Title }
-            : null,
+          Contact: contacts,
           CSIDivisions: item["CSI_x0020_Div"]
             ? Array.isArray(item["CSI_x0020_Div"])
               ? item["CSI_x0020_Div"]
@@ -157,10 +164,6 @@ const BlogsTable = (props: any) => {
 
       const sorted = sortByDate(mapped);
       setAllPosts(sorted);
-
-      // FIXED: Don't set visiblePosts or tableItems here
-      // Let the filter effect handle it
-
       setLoading(false);
     } catch (err) {
       console.error("Error fetching posts:", err);
@@ -194,7 +197,9 @@ const BlogsTable = (props: any) => {
   const handleCsiDivisionSelect = (division: ICSIDivision) => {
     setSelectedCsiDivisions((prev) => {
       const exists = prev.some((d) => d.Id === division.Id);
-      return exists ? prev.filter((d) => d.Id !== division.Id) : [...prev, division];
+      return exists
+        ? prev.filter((d) => d.Id !== division.Id)
+        : [...prev, division];
     });
     setPage(1);
   };
@@ -236,7 +241,10 @@ const BlogsTable = (props: any) => {
 
         const csiTitles =
           post.CSIDivisions?.map((c: any) => c.Title || "").join(" ") || "";
-        const contactTitle = post.Contact?.Title || "";
+        const contactTitle =
+          post.Contact && post.Contact.length > 0
+            ? post.Contact.map((c) => c.Title).join(" ")
+            : "";
 
         const contentToSearch = `${post.Title} ${post.Author} ${
           post.PublishedDate
@@ -269,7 +277,10 @@ const BlogsTable = (props: any) => {
 
       const csiTitles =
         post.CSIDivisions?.map((c: any) => c.Title || "").join(" ") || "";
-      const contactTitle = post.Contact?.Title || "";
+      const contactTitle =
+        post.Contact && post.Contact.length > 0
+          ? post.Contact.map((c) => c.Title).join(" ")
+          : "";
 
       const contentToSearch = `${post.Title} ${post.Author} ${
         post.PublishedDate
@@ -286,7 +297,7 @@ const BlogsTable = (props: any) => {
     setCurrentResultIndex(matches.length > 0 ? 0 : -1);
   }, [searchQuery, getFilteredPostsByCsi]);
 
-  // FIXED: apply filters to cards + table - removed dependencies causing issues
+  // apply filters to cards + table
   const applyFiltersAndUpdatePosts = useCallback(() => {
     const filtered = getFilteredPosts();
 
@@ -300,16 +311,21 @@ const BlogsTable = (props: any) => {
     // CARDS: show only till current page
     const endIndex = page * postsPerPage;
     setVisiblePosts(filtered.slice(0, endIndex));
-  }, [getFilteredPosts, updateSearchResultIndices, page]);
+  }, [getFilteredPosts, updateSearchResultIndices, page, searchQuery]);
 
-  // FIXED: Added allPosts.length check to trigger on data load
   useEffect(() => {
     if (allPosts.length > 0) {
       applyFiltersAndUpdatePosts();
     }
-  }, [selectedCsiDivisions, searchQuery, allPosts.length, page, applyFiltersAndUpdatePosts]);
+  }, [
+    selectedCsiDivisions,
+    searchQuery,
+    allPosts.length,
+    page,
+    applyFiltersAndUpdatePosts,
+  ]);
 
-  // FIXED: infinite scroll for cards view - added getFilteredPosts dependency
+  // infinite scroll for cards view
   useEffect(() => {
     if (activeView !== "cards") return;
 
@@ -477,7 +493,7 @@ const BlogsTable = (props: any) => {
     return activeView === "cards" && visiblePosts.length < filtered.length;
   };
 
-  // FIXED: TABLE columns - moved onColumnClick definition before columns array
+  // column click
   const onColumnClick = (
     ev?: React.MouseEvent<HTMLElement>,
     column?: IColumn
@@ -491,13 +507,14 @@ const BlogsTable = (props: any) => {
     setTableItems(sorted);
   };
 
+  // define columns
   useEffect(() => {
     const cols: IColumn[] = [
       {
         key: "Title",
         name: "Title",
         fieldName: "Title",
-        minWidth: 200,
+        minWidth: 160,
         isResizable: true,
         isSorted: sortConfig.key === "Title",
         isSortedDescending:
@@ -506,7 +523,7 @@ const BlogsTable = (props: any) => {
         onRender: (item: IBlogPost) => (
           <Stack horizontal tokens={{ childrenGap: 6 }} verticalAlign="center">
             <a
-              href={`${siteUrl}/SitePages/DemoLessonsLearned.aspx?PostId=${item.Id}`}
+              href={`${siteUrl}/SitePages/LessonsLearnedView.aspx?LessonsLearnedId=${item.Id}`}
             >
               {item.Title}
             </a>
@@ -544,41 +561,40 @@ const BlogsTable = (props: any) => {
         key: "Contact",
         name: "Contact",
         fieldName: "Contact",
-        minWidth: 120,
+        minWidth: 160,
         isResizable: true,
         isSorted: sortConfig.key === "Contact",
         isSortedDescending:
           sortConfig.key === "Contact" && sortConfig.isSortedDescending,
         onColumnClick: onColumnClick,
-        onRender: (item: IBlogPost) => item.Contact?.Title || "",
+        onRender: (item: IBlogPost) => {
+          const contacts = item.Contact || [];
+          if (!contacts || contacts.length === 0) return "—";
+          return (
+            <div>
+              {contacts.map((c, idx) => (
+                <div key={idx}>{c?.Title || "Contact"}</div>
+              ))}
+            </div>
+          );
+        },
       },
       {
         key: "CSI",
         name: "CSI Division",
         fieldName: "CSI",
-        minWidth: 140,
+        minWidth: 160,
         isResizable: true,
         isSorted: sortConfig.key === "CSI",
         isSortedDescending:
           sortConfig.key === "CSI" && sortConfig.isSortedDescending,
         onColumnClick: onColumnClick,
-        onRender: (item: IBlogPost) =>
-          (item.CSIDivisions || [])
-            .map((d: any) => d.Title)
-            .filter(Boolean)
-            .join(", "),
-      },
-      {
-        key: "Edit",
-        name: "Edit",
-        fieldName: "edit",
-        minWidth: 50,
         onRender: (item: IBlogPost) => (
-          <IconButton
-            iconProps={{ iconName: "Edit" }}
-            onClick={() => openEditPanel(item)}
-            title="Edit"
-          />
+          <div>
+            {(item.CSIDivisions || []).map((d) => (
+              <div key={d?.Id}>{d?.Title}</div>
+            ))}
+          </div>
         ),
       },
     ];
@@ -604,8 +620,8 @@ const BlogsTable = (props: any) => {
           bVal = b.PublishedDate ? new Date(b.PublishedDate).getTime() : 0;
           break;
         case "Contact":
-          aVal = a.Contact?.Title || "";
-          bVal = b.Contact?.Title || "";
+          aVal = a.Contact && a.Contact.length > 0 ? a.Contact[0].Title : "";
+          bVal = b.Contact && b.Contact.length > 0 ? b.Contact[0].Title : "";
           break;
         case "CSI":
           aVal = (a.CSIDivisions || [])
@@ -627,53 +643,21 @@ const BlogsTable = (props: any) => {
     return sorted;
   };
 
-  // edit panel
-  const openEditPanel = (item: IBlogPost) => {
-    setEditItem(item);
-    setEditTitle(item.Title);
-    setEditCsiDivisions((item.CSIDivisions || []).map((d: any) => d.Id));
-    setIsEditOpen(true);
-  };
-  const closeEditPanel = () => setIsEditOpen(false);
-
-  const onSaveEdit = async () => {
-    if (!editItem) return;
-    try {
-      const sp = spfi().using(SPFx(props.Context));
-      await sp.web.lists.getById(ListIds.posts).items.getById(editItem.Id).update({
-        Title: editTitle,
-        "CSI_x0020_DivId": editCsiDivisions,
-      });
-
-      const updated = allPosts.map((p) =>
-        p.Id === editItem.Id
-          ? {
-              ...p,
-              Title: editTitle,
-              CSIDivisions: csiDivisions.filter((d) =>
-                editCsiDivisions.includes(d.Id)
-              ),
-            }
-          : p
-      );
-      setAllPosts(sortByDate(updated));
-      setIsEditOpen(false);
-    } catch (err) {
-      console.error("Error updating post", err);
-    }
-  };
-
-  const csiDropdownOptions: IDropdownOption[] = csiDivisions.map((d) => ({
-    key: d.Id,
-    text: d.Title,
-  }));
-
   return (
-    <div className="blogs-table-layout">
+    <>
+     {canEdit ? (
+                  <a href="https://vaughnconstruction.sharepoint.com/ll/Lists/Posts/AllPosts.aspx" target="_blank" data-interception="off" style={{ textDecoration: 'none' }}>
+                      <h2 style={{paddingBottom:'10px'}}>Lessons Learned </h2>
+                  </a>
+              ) : (
+                  <h2 style={{paddingBottom:'10px'}}>Lessons Learned </h2>
+              )}
+                <div className="blogs-table-layout">
+        
       {/* LEFT SIDE: CSI ONLY */}
       <div className="csi-panel">
         <div className="ms-core-listMenu-verticalBox ms-noList">
-          <ul className="static ms-blog-listMenu-root ms-core-listMenu-root root">
+          <ul className="static ms-blog-listMenu-root ms-core-listMenu-root root" style={{width: '100%'}}>
             <li>
               <span className="ms-core-listMenu-item ms-blog-quickLinksTitle">
                 CSI Division
@@ -711,8 +695,9 @@ const BlogsTable = (props: any) => {
               style={{
                 marginBottom: "10px",
                 padding: "5px 10px",
-                backgroundColor: "#f0f0f0",
+                backgroundColor: "#ffffff", // was #f0f0f0
                 borderRadius: "4px",
+                border: "1px solid #e5e5e5",
               }}
             >
               <div
@@ -739,7 +724,8 @@ const BlogsTable = (props: any) => {
                       display: "flex",
                       alignItems: "center",
                       padding: "3px 8px",
-                      backgroundColor: "#e0e0e0",
+                      backgroundColor: "#ffffff",
+                      border: "1px solid #d0d0d0",
                       borderRadius: "3px",
                       marginBottom: "3px",
                     }}
@@ -792,7 +778,7 @@ const BlogsTable = (props: any) => {
           </Stack>
 
           <Stack horizontal tokens={{ childrenGap: 8 }} style={{ marginTop: 8 }}>
-            {activeView !== "table" && <Label>{getResultCountText()}</Label>}
+            {activeView !== "table" && <LabelLike text={getResultCountText()} />}
             <Stack horizontal tokens={{ childrenGap: 4 }}>
               <PrimaryButton
                 text="Table View"
@@ -800,13 +786,23 @@ const BlogsTable = (props: any) => {
                 styles={{
                   root: {
                     backgroundColor:
-                      activeView === "table" ? "#005a9e" : undefined,
+                      activeView === "table" ? "#005a9e" : "#ffffff",
+                    color: activeView === "table" ? "#ffffff" : "#005a9e",
+                    border: "1px solid #005a9e",
                   },
                 }}
               />
-              <DefaultButton
+              <PrimaryButton
                 text="Cards View"
                 onClick={() => setActiveView("cards")}
+                styles={{
+                  root: {
+                    backgroundColor:
+                      activeView === "cards" ? "#005a9e" : "#ffffff",
+                    color: activeView === "cards" ? "#ffffff" : "#005a9e",
+                    border: "1px solid #005a9e",
+                  },
+                }}
               />
             </Stack>
           </Stack>
@@ -923,41 +919,15 @@ const BlogsTable = (props: any) => {
           )}
         </div>
       </div>
-
-      {/* EDIT PANEL */}
-      <Panel
-        isOpen={isEditOpen}
-        onDismiss={closeEditPanel}
-        headerText="Edit Post"
-        closeButtonAriaLabel="Close"
-        type={PanelType.medium}
-      >
-        <TextField
-          label="Title"
-          value={editTitle}
-          onChange={(_, v) => setEditTitle(v || "")}
-        />
-        <Dropdown
-          label="CSI Division"
-          multiSelect
-          selectedKeys={editCsiDivisions}
-          onChange={(_, option) => {
-            if (!option) return;
-            const id = option.key as number;
-            setEditCsiDivisions((prev) => {
-              if (option.selected) return [...prev, id];
-              return prev.filter((p) => p !== id);
-            });
-          }}
-          options={csiDropdownOptions}
-        />
-        <Stack horizontal tokens={{ childrenGap: 8 }} style={{ marginTop: 16 }}>
-          <PrimaryButton text="Save" onClick={onSaveEdit} />
-          <DefaultButton text="Cancel" onClick={closeEditPanel} />
-        </Stack>
-      </Panel>
     </div>
+    </>
+  
   );
 };
+
+// tiny helper so we don't import Label again
+const LabelLike = ({ text }: { text: string }) => (
+  <span style={{ paddingTop: 4 }}>{text}</span>
+);
 
 export default BlogsTable;
