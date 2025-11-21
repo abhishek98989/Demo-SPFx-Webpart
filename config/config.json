@@ -113,6 +113,22 @@
           "manifest": "./src/webparts/lessonLearnedTable/LessonLearnedTableWebPart.manifest.json"
         }
       ]
+    },
+    "weekly-words-preview-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/weeklyWordsPreview/WeeklyWordsPreviewWebPart.js",
+          "manifest": "./src/webparts/weeklyWordsPreview/WeeklyWordsPreviewWebPart.manifest.json"
+        }
+      ]
+    },
+    "custom-document-search-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/customDocumentSearch/CustomDocumentSearchWebPart.js",
+          "manifest": "./src/webparts/customDocumentSearch/CustomDocumentSearchWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},
@@ -131,6 +147,8 @@
     "ResourceLibraryWebPartStrings": "lib/webparts/resourceLibrary/loc/{locale}.js",
     "WeeklyWordsManagementWebPartStrings": "lib/webparts/weeklyWordsManagement/loc/{locale}.js",
     "WeeklyWordsViewerWebPartStrings": "lib/webparts/weeklyWordsViewer/loc/{locale}.js",
-    "LessonLearnedTableWebPartStrings": "lib/webparts/lessonLearnedTable/loc/{locale}.js"
+    "LessonLearnedTableWebPartStrings": "lib/webparts/lessonLearnedTable/loc/{locale}.js",
+    "WeeklyWordsPreviewWebPartStrings": "lib/webparts/weeklyWordsPreview/loc/{locale}.js",
+    "CustomDocumentSearchWebPartStrings": "lib/webparts/customDocumentSearch/loc/{locale}.js"
   }
 }

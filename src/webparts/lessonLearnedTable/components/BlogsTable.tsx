@@ -493,155 +493,146 @@ console.error("Error checking permissions:", err);
     return activeView === "cards" && visiblePosts.length < filtered.length;
   };
 
-  // column click
-  const onColumnClick = (
-    ev?: React.MouseEvent<HTMLElement>,
-    column?: IColumn
-  ) => {
-    if (!column) return;
-    const desc =
-      sortConfig.key === column.key ? !sortConfig.isSortedDescending : false;
-    setSortConfig({ key: column.key, isSortedDescending: desc });
+ // ---- Replace your onColumnClick + sortTable + useEffect(columns) with this ----
 
-    const sorted = sortTable(tableItems, column.key, desc);
-    setTableItems(sorted);
-  };
+// Sorting logic
+const sortTable = (
+  items: IBlogPost[],
+  key: string,
+  desc: boolean
+): IBlogPost[] => {
+  return [...items].sort((a, b) => {
+    let aVal: any = "";
+    let bVal: any = "";
 
-  // define columns
-  useEffect(() => {
-    const cols: IColumn[] = [
-      {
-        key: "Title",
-        name: "Title",
-        fieldName: "Title",
-        minWidth: 160,
-        isResizable: true,
-        isSorted: sortConfig.key === "Title",
-        isSortedDescending:
-          sortConfig.key === "Title" && sortConfig.isSortedDescending,
-        onColumnClick: onColumnClick,
-        onRender: (item: IBlogPost) => (
-          <Stack horizontal tokens={{ childrenGap: 6 }} verticalAlign="center">
-            <a
-              href={`${siteUrl}/SitePages/LessonsLearnedView.aspx?LessonsLearnedId=${item.Id}`}
-            >
-              {item.Title}
-            </a>
-            <TooltipHost
-              content={
-                <div
-                  style={{ maxHeight: 250, overflowY: "auto" }}
-                  dangerouslySetInnerHTML={{
-                    __html: DOMPurify.sanitize(item.Body || ""),
-                  }}
-                />
-              }
-            >
-              <IconButton iconProps={{ iconName: "Info" }} />
-            </TooltipHost>
-          </Stack>
-        ),
-      },
-      {
-        key: "PublishedDate",
-        name: "Published",
-        fieldName: "PublishedDate",
-        minWidth: 120,
-        isResizable: true,
-        isSorted: sortConfig.key === "PublishedDate",
-        isSortedDescending:
-          sortConfig.key === "PublishedDate" && sortConfig.isSortedDescending,
-        onColumnClick: onColumnClick,
-        onRender: (item: IBlogPost) =>
-          item.PublishedDate
-            ? new Date(item.PublishedDate).toLocaleString()
-            : "",
-      },
-      {
-        key: "Contact",
-        name: "Contact",
-        fieldName: "Contact",
-        minWidth: 160,
-        isResizable: true,
-        isSorted: sortConfig.key === "Contact",
-        isSortedDescending:
-          sortConfig.key === "Contact" && sortConfig.isSortedDescending,
-        onColumnClick: onColumnClick,
-        onRender: (item: IBlogPost) => {
-          const contacts = item.Contact || [];
-          if (!contacts || contacts.length === 0) return "—";
-          return (
-            <div>
-              {contacts.map((c, idx) => (
-                <div key={idx}>{c?.Title || "Contact"}</div>
-              ))}
-            </div>
-          );
-        },
-      },
-      {
-        key: "CSI",
-        name: "CSI Division",
-        fieldName: "CSI",
-        minWidth: 160,
-        isResizable: true,
-        isSorted: sortConfig.key === "CSI",
-        isSortedDescending:
-          sortConfig.key === "CSI" && sortConfig.isSortedDescending,
-        onColumnClick: onColumnClick,
-        onRender: (item: IBlogPost) => (
-          <div>
-            {(item.CSIDivisions || []).map((d) => (
-              <div key={d?.Id}>{d?.Title}</div>
-            ))}
-          </div>
-        ),
-      },
-    ];
-    setColumns(cols);
-  }, [siteUrl, sortConfig]);
+    switch (key) {
+      case "Title":
+        aVal = a.Title || "";
+        bVal = b.Title || "";
+        break;
+      case "PublishedDate":
+        aVal = a.PublishedDate ? new Date(a.PublishedDate).getTime() : 0;
+        bVal = b.PublishedDate ? new Date(b.PublishedDate).getTime() : 0;
+        break;
+      case "Contact":
+        aVal = a.Contact?.[0]?.Title || "";
+        bVal = b.Contact?.[0]?.Title || "";
+        break;
+      case "CSI":
+        aVal = (a.CSIDivisions || []).map((d) => d.Title).join(",") || "";
+        bVal = (b.CSIDivisions || []).map((d) => d.Title).join(",") || "";
+        break;
+    }
 
-  const sortTable = (
-    items: IBlogPost[],
-    key: string,
-    desc: boolean
-  ): IBlogPost[] => {
-    const sorted = [...items].sort((a, b) => {
-      let aVal: any = "";
-      let bVal: any = "";
+    if (aVal < bVal) return desc ? 1 : -1;
+    if (aVal > bVal) return desc ? -1 : 1;
+    return 0;
+  });
+};
 
-      switch (key) {
-        case "Title":
-          aVal = a.Title || "";
-          bVal = b.Title || "";
-          break;
-        case "PublishedDate":
-          aVal = a.PublishedDate ? new Date(a.PublishedDate).getTime() : 0;
-          bVal = b.PublishedDate ? new Date(b.PublishedDate).getTime() : 0;
-          break;
-        case "Contact":
-          aVal = a.Contact && a.Contact.length > 0 ? a.Contact[0].Title : "";
-          bVal = b.Contact && b.Contact.length > 0 ? b.Contact[0].Title : "";
-          break;
-        case "CSI":
-          aVal = (a.CSIDivisions || [])
-            .map((d: any) => d.Title)
-            .sort()
-            .join(",");
-          bVal = (b.CSIDivisions || [])
-            .map((d: any) => d.Title)
-            .sort()
-            .join(",");
-          break;
-      }
+// Column click handler
+const onColumnClick = (
+  ev?: React.MouseEvent<HTMLElement>,
+  column?: IColumn
+) => {
+  if (!column) return;
 
-      if (aVal < bVal) return desc ? 1 : -1;
-      if (aVal > bVal) return desc ? -1 : 1;
-      return 0;
-    });
+  // derive next sort direction before setting state
+  const nextIsDesc =
+    sortConfig.key === column.key ? !sortConfig.isSortedDescending : false;
 
-    return sorted;
-  };
+  // update the state (for UI arrows)
+  setSortConfig({ key: column.key, isSortedDescending: nextIsDesc });
+
+  // now use same nextIsDesc immediately
+  const filtered = getFilteredPosts();
+  const sorted = sortTable(filtered, column.key, nextIsDesc);
+  setTableItems(sorted);
+};
+
+
+// Columns (depends on sortConfig so header arrows update)
+useEffect(() => {
+  const cols: IColumn[] = [
+    {
+      key: "Title",
+      name: "Title",
+      fieldName: "Title",
+      minWidth: 160,
+      isResizable: true,
+      isSorted: sortConfig.key === "Title",
+      isSortedDescending:
+        sortConfig.key === "Title" && sortConfig.isSortedDescending,
+      onColumnClick: onColumnClick,
+      onRender: (item: IBlogPost) => (
+        <Stack horizontal tokens={{ childrenGap: 6 }} verticalAlign="center">
+          <a
+            href={`${siteUrl}/SitePages/LessonsLearnedView.aspx?LessonsLearnedId=${item.Id}`}
+          >
+            {item.Title}
+          </a>
+          <TooltipHost
+            content={
+              <div
+                style={{ maxHeight: 250, overflowY: "auto" }}
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(item.Body || ""),
+                }}
+              />
+            }
+          >
+            <IconButton iconProps={{ iconName: "Info" }} />
+          </TooltipHost>
+        </Stack>
+      ),
+    },
+    {
+      key: "PublishedDate",
+      name: "Published",
+      fieldName: "PublishedDate",
+      minWidth: 120,
+      isResizable: true,
+      isSorted: sortConfig.key === "PublishedDate",
+      isSortedDescending:
+        sortConfig.key === "PublishedDate" && sortConfig.isSortedDescending,
+      onColumnClick: onColumnClick,
+      onRender: (item: IBlogPost) =>
+        item.PublishedDate
+          ? new Date(item.PublishedDate).toLocaleString()
+          : "",
+    },
+    {
+      key: "Contact",
+      name: "Contact",
+      fieldName: "Contact",
+      minWidth: 160,
+      isResizable: true,
+      isSorted: sortConfig.key === "Contact",
+      isSortedDescending:
+        sortConfig.key === "Contact" && sortConfig.isSortedDescending,
+      onColumnClick: onColumnClick,
+      onRender: (item: any) =>
+        (item.Contact || []).length > 0
+          ? item?.Contact.map((c:any) => c?.Title)?.join(", ")
+          : "—",
+    },
+    {
+      key: "CSI",
+      name: "CSI Division",
+      fieldName: "CSI",
+      minWidth: 160,
+      isResizable: true,
+      isSorted: sortConfig.key === "CSI",
+      isSortedDescending:
+        sortConfig.key === "CSI" && sortConfig.isSortedDescending,
+      onColumnClick: onColumnClick,
+      onRender: (item: IBlogPost) =>
+        (item.CSIDivisions || []).map((d) => d.Title).join(", "),
+    },
+  ];
+  setColumns(cols);
+}, [sortConfig, siteUrl]);
+
 
   return (
     <>

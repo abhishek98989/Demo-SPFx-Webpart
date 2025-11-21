@@ -31,6 +31,8 @@
     "@toast-ui/react-editor": "^3.2.3",
     "bootstrap": "^5.3.6",
     "dompurify": "^3.2.5",
+    "jodit": "^4.7.9",
+    "jodit-react": "^5.2.38",
     "jquery": "^3.7.1",
     "lucide-react": "^0.546.0",
     "office-ui-fabric-react": "^7.204.1",

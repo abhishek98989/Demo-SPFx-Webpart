@@ -27,9 +27,9 @@ import { Dialog, DialogType, DialogFooter } from "@fluentui/react/lib/Dialog";
 import { MessageBar, MessageBarType } from "@fluentui/react/lib/MessageBar";
 import { Breadcrumb, IBreadcrumbItem } from "@fluentui/react/lib/Breadcrumb";
 import { Checkbox } from "@fluentui/react/lib/Checkbox";
-import { CKEditor } from "@ckeditor/ckeditor5-react";
-import ClassicEditor from "@ckeditor/ckeditor5-build-classic";
+import JoditEditor from "jodit-react";
 
+// NOTE: class kept but not used by paste anymore
 class SPImageUploadAdapter {
   private loader: any;
   private sp: any;
@@ -128,8 +128,10 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
   // ICYM
   const [icymOptions, setIcymOptions] = useState<Array<{ key: number; text: string }>>([]);
   const [icymSelected, setIcymSelected] = useState<number[]>([]);
-  //Article Date 
+
+  // Article Date 
   const [articleDate, setArticleDate] = useState<Date | null>(null);
+
   // Image picker
   const [imagePickerTarget, setImagePickerTarget] = useState<"editor" | "rollup">("editor");
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
@@ -141,7 +143,34 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
   const [uploading, setUploading] = useState(false);
   const [urlToInsert, setUrlToInsert] = useState("");
 
+  // NEW: processing pasted images state
+  const [processingImages, setProcessingImages] = useState(false);
+
   const editorRef = useRef<any>(null);
+
+  // SIMPLE JODIT CONFIG – paste is default, no custom events.afterPaste
+  const joditConfig = React.useMemo(
+    () => ({
+      readonly: false,
+      height: 400,
+      toolbarSticky: false,
+      buttons: [
+        "source", "|",
+        "bold", "italic", "underline", "strikethrough", "|",
+        "ul", "ol", "indent", "outdent", "|",
+        "font", "fontsize", "paragraph", "|",
+        "left", "center", "right", "justify", "|",
+        "image", "table", "link", "|",
+        "hr", "eraser", "fullsize", "selectall", "undo", "redo"
+      ],
+      allowResizeX: true,
+      allowResizeY: true,
+      imageDefaultWidth: 300,
+      enableDragAndDropFileToEditor: true,
+      // let Jodit handle paste normally (images will be base64/blob)
+    }),
+    []
+  );
 
   // NEW: dropdown options
   const departmentOptions: IDropdownOption[] = [
@@ -171,7 +200,7 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
       name: "Article Date",
       minWidth: 140,
       onRender: (i: IListItem) => {
-        const raw = i.ArticleDate || ''; // fallback for safety
+        const raw = i.ArticleDate || ""; // fallback for safety
         if (!raw) return "—";
         const d = new Date(raw);
         return Number.isFinite(d.getTime()) ? d.toLocaleDateString() : "—";
@@ -201,7 +230,6 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
     };
   });
 
-
   // Initial data load
   useEffect(() => {
     (async () => {
@@ -214,10 +242,12 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
     })().catch((e) => setError(parseError(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imagesWebServerRelativeUrl, imagesLibraryTitle]);
+
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchRaw.trim().toLowerCase()), 250);
     return () => clearTimeout(t);
   }, [searchRaw]);
+
   async function loadItems() {
     try {
       setLoading(true);
@@ -246,7 +276,6 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
         .expand("InCaseYouMissed", "PublishingContact")
         .orderBy("Created", false)();
 
-      // CHANGE in loadItems(): map Published correctly
       const mapped: IListItem[] = rows.map(r => ({
         Id: r.Id,
         Title: r.Title,
@@ -266,7 +295,6 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
         ArticleDate: r.ArticleDate || undefined,
         InCaseYouMissed: Array.isArray(r.InCaseYouMissed) ? r.InCaseYouMissed.map((x: any) => ({ Id: x.Id, Title: x.Title })) : []
       }));
-
 
       setItems(mapped);
 
@@ -321,191 +349,150 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
     setIsPanelOpen(true);
   }
 
-  // CHANGE in saveItem(): after add/update, set approval based on the checkbox
-  // CHANGE in saveItem(): after add/update, set approval based on the checkbox
-  async function saveItem() {
-    try {
-      setLoading(true);
-      setError(null);
-      const list = sp.web.lists.getById(listId);
-
-      const body: any = {
-        Title: title,
-        VaughnContent: descriptionHtml,
-        Abstract: abstractText,
-        PublishingRollupImage: rollupImageUrl ? { Url: rollupImageUrl, Description: "Rollup" } : null,
-        PublishingContactId: publishingContactId ?? null,
-        Department: department || null,
-        PublishingSource: publishingSource || null,
-        ArticleDate: articleDate ? articleDate : null
-        // DO NOT try to set OData__ModerationStatus directly
-      };
-
-      // Multi-lookup field: only add if there are selections, otherwise omit entirely
-      if (icymSelected.length > 0) {
-        body.InCaseYouMissedId = icymSelected;
-      }
-
-      let itemId: number;
-
-      if (editingItem) {
-        await list.items.getById(editingItem.Id).update(body);
-        itemId = editingItem.Id;
-
-        // If we need to clear the multi-lookup field when empty
-        if (icymSelected.length === 0) {
-          await list.items.getById(itemId).update({ InCaseYouMissedId: { results: [] } });
-        }
-      } else {
-        const addRes = await list.items.add(body);
-
-      }
-
-
-      setIsPanelOpen(false);
-      await loadItems();
-    } catch (e) {
-      setError(parseError(e));
-      setLoading(false);
-    }
-  }
-  // Delete flow
-  const [deleteTarget, setDeleteTarget] = useState<IListItem | null>(null);
-  function confirmDelete(item: IListItem) { setDeleteTarget(item); }
-  async function doDelete() {
-    if (!deleteTarget) return;
-    try {
-      setLoading(true);
-      const list = sp.web.lists.getById(listId);
-      await list.items.getById(deleteTarget.Id).recycle();
-      setDeleteTarget(null);
-      await loadItems();
-    } catch (e) {
-      setError(parseError(e));
-      setLoading(false);
-    }
-  }
-  // accessors for sorting per column
-  const accessors: Record<string, (i: IListItem) => string> = {
-    col_title: (i) => i.Title || "",
-    col_author: (i) => i.Author?.Title || "",
-    col_pub: (i) => (i.Published ? "Approved" : "Pending"),
-    col_dept: (i) => i.Department || "None",
-    col_src: (i) => i.PublishingSource || "",
-    col_rollup: (i) => i.PublishingRollupImageUrl || "",
-    col_artdate: (i) => i.ArticleDate || "",
-  };
-  // robust numeric timestamp, fallback to 0
-  function tsOf(i: IListItem): number {
-    const s = accessors.col_artdate(i);
-    const n = s ? new Date(s).getTime() : NaN;
-    return Number.isFinite(n) ? n : 0;
-  }
-  function onColumnClick(ev?: React.MouseEvent<HTMLElement>, column?: IColumn) {
-    if (!column) return;
-    const newKey = column.key;
-    if (newKey === sortKey) {
-      setSortDesc(!sortDesc);
-    } else {
-      setSortKey(newKey);
-      setSortDesc(false);
-    }
-  }
-
-  // normalize HTML to text for Description search
-  function stripHtml(html?: string) {
-    if (!html) return "";
-    return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  }
-  const haystack = (i: IListItem) => {
-    const parts = [
-      i.Title,
-      i.Author?.Title,
-      i.Author?.EMail,
-      i.Department,
-      i.PublishingSource,
-      i.Abstract,
-      i.PublishingRollupImageUrl,
-      i.Published ? "approved" : "pending",
-      stripHtml(i.Description),
-      i.ArticleDate,
-      i.Created,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    return parts;
-  };
-
-  const displayItems = useMemo(() => {
-    let rows = items;
-
-    if (search) {
-      rows = rows.filter((i) => haystack(i).includes(search));
-    }
-
-    // date sort: newest first by default (sortDesc=true)
-    if (sortKey === "col_artdate") {
-      const sorted = [...rows].sort((a, b) => tsOf(a) - tsOf(b));
-      return sortDesc ? sorted.reverse() : sorted;
-    }
-
-    // string sorts for other columns
-    const acc = accessors[sortKey] || accessors["col_title"];
-    const sorted = [...rows].sort((a, b) => {
-      const av = acc(a).toLocaleLowerCase();
-      const bv = acc(b).toLocaleLowerCase();
-      if (av < bv) return -1;
-      if (av > bv) return 1;
-      return 0;
-    });
-
-    return sortDesc ? sorted.reverse() : sorted;
-  }, [items, search, sortKey, sortDesc]);
-
-  // Image Picker logic
-  useEffect(() => {
-    if (!isImagePickerOpen || !currentFolder) return;
-    (async () => {
-      try {
-        setPickerError(null);
-        let spImg = spfi('https://vaughnconstruction.sharepoint.com/news').using(SPFx(context));
-        const folder = await spImg.web.getFolderByServerRelativePath(currentFolder);
-        const [subs, files] = await Promise.all([folder.folders(), folder.files()]);
-        setFolderSubfolders(subs);
-        setFolderFiles(files);
-
-        const parts = currentFolder.replace(/^\/+/, "").split("/");
-        const baseIndex = parts.findIndex((p) => p.toLowerCase() === "publishingimages");
-        const trailParts = parts.slice(0, baseIndex + 1);
-        const crumbs: IBreadcrumbItem[] = trailParts.map((p, idx) => {
-          const path = "/" + parts.slice(0, idx + 1).join("/");
-          return { key: path, text: idx === 0 ? (imagesWebServerRelativeUrl.replace(/^\/+/, "")) : p, onClick: () => setCurrentFolder(path) } as IBreadcrumbItem;
-        });
-        const after = parts.slice(baseIndex + 1);
-        after.forEach((seg, i) => {
-          const path = "/" + parts.slice(0, baseIndex + 2 + i).join("/");
-          crumbs.push({ key: path, text: seg, onClick: () => setCurrentFolder(path) });
-        });
-        setFolderTrail(crumbs);
-      } catch (e) {
-        setPickerError(parseError(e));
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isImagePickerOpen, currentFolder]);
-
+  // HELPER: insert image at cursor into Jodit
   function insertImageAtCursor(src: string, alt = "") {
-    const editor = editorRef.current;
-    if (editor?.execute) {
-      editor.execute("imageInsert", { source: [{ src, alt }] });
-      editor.editing.view.focus();
-    } else {
-      setDescriptionHtml((h) => h + `<p><img src="${src}" alt="${alt}" /></p>`);
+    const imgHtml = `<img src="${src}" alt="${alt}" />`;
+
+    const maybeEditor =
+      (editorRef.current as any)?.editor ||
+      (editorRef.current as any) ||
+      (editorRef.current as any)?.getEditor?.();
+
+    if (maybeEditor) {
+      try {
+        if (maybeEditor?.s?.focus) {
+          maybeEditor.s.focus();
+        }
+
+        if (maybeEditor?.selection?.insertHTML) {
+          maybeEditor.selection.insertHTML(imgHtml);
+        } else if (maybeEditor?.value !== undefined) {
+          maybeEditor.value = (maybeEditor.value || "") + `<p>${imgHtml}</p>`;
+        }
+
+        const currentHtml =
+          maybeEditor?.value !== undefined
+            ? maybeEditor.value
+            : (descriptionHtml || "") + `<p>${imgHtml}</p>`;
+
+        setDescriptionHtml(currentHtml);
+        return;
+      } catch (e) {
+        // fall through to React-only fallback
+      }
     }
+
+    setDescriptionHtml((h) => (h || "") + `<p>${imgHtml}</p>`);
   }
 
+  // NEW: PROCESS PASTED IMAGES (button + used in save)
+ // NEW: PROCESS PASTED IMAGES (button + used in save)
+// NEW: PROCESS PASTED IMAGES (button + used in save)
+// NEW: PROCESS PASTED IMAGES (button + used in save)
+const processEditorImages = async (): Promise<string | null> => {
+  const maybeEditor =
+    (editorRef.current as any)?.editor ||
+    (editorRef.current as any)?.getEditor?.() ||
+    (editorRef.current as any);
+
+  if (!maybeEditor) {
+    console.warn("No editor instance found");
+    return descriptionHtml;
+  }
+
+  // Check if maybeEditor itself IS the root element (DIV)
+  let root: HTMLElement | null = null;
+  
+  if (maybeEditor instanceof HTMLElement) {
+    // maybeEditor is directly the div
+    root = maybeEditor.classList?.contains('jodit-wysiwyg') 
+      ? maybeEditor 
+      : maybeEditor.querySelector?.('.jodit-wysiwyg') || maybeEditor;
+  } else {
+    // Try the usual properties
+    root =
+      maybeEditor?.editor ||
+      maybeEditor?.container?.querySelector?.(".jodit-wysiwyg") ||
+      maybeEditor?.workplace ||
+      document.querySelector?.(".jodit-wysiwyg") ||
+      null;
+  }
+
+  if (!root) {
+    console.warn("Could not find editor root element");
+    return descriptionHtml;
+  }
+
+  // Query ALL images deeply nested (querySelectorAll searches all descendants)
+  const imgs = root.querySelectorAll("img[src^='data:image'], img[src^='blob:']");
+  
+  if (!imgs.length) {
+    // Get HTML from either the div or editor value
+    const htmlNow = (maybeEditor instanceof HTMLElement) 
+      ? root.innerHTML 
+      : (maybeEditor?.value ?? root.innerHTML ?? descriptionHtml);
+    return htmlNow;
+  }
+
+  try {
+    setProcessingImages(true);
+
+    const spImg = spfi("https://vaughnconstruction.sharepoint.com/news").using(SPFx(context));
+    const folderUrl = `${imagesWebServerRelativeUrl}/PublishingImages`;
+    const folder = spImg.web.getFolderByServerRelativePath(folderUrl);
+
+    for (const node of Array.from(imgs)) {
+      const img = node as HTMLImageElement;
+      const src = img.getAttribute("src");
+      if (!src) continue;
+
+      // Double-check (though selector should have filtered)
+      if (!src.startsWith("data:image") && !src.startsWith("blob:")) continue;
+
+      const blob = await fetch(src).then((r) => r.blob());
+      const fileName = `paste-${Date.now()}-${Math.floor(Math.random() * 1000)}.png`;
+
+      const addResult = await folder.files.addUsingPath(fileName, blob, { Overwrite: true });
+
+      const url =
+        (addResult as any)?.data?.ServerRelativeUrl ||
+        (addResult as any)?.file?.serverRelativeUrl ||
+        (addResult as any)?.ServerRelativeUrl;
+
+      if (url) {
+        // Preserve original Word dimensions if available
+        const width = img.getAttribute("width");
+        const height = img.getAttribute("height");
+        if (width) img.style.width = `${width}px`;
+        if (height) img.style.height = `${height}px`;
+
+        img.setAttribute("src", url);
+        img.style.maxWidth = "100%";
+        img.style.height = "auto";
+      }
+    }
+
+    // Get the updated HTML
+    const newHtml = (maybeEditor instanceof HTMLElement)
+      ? root.innerHTML
+      : (maybeEditor?.value !== undefined ? maybeEditor.value : root.innerHTML);
+
+    setDescriptionHtml(newHtml);
+    
+    // If maybeEditor has a value property, update it too
+    if (maybeEditor?.value !== undefined && !(maybeEditor instanceof HTMLElement)) {
+      maybeEditor.value = newHtml;
+    }
+    
+    return newHtml;
+  } catch (e) {
+    console.error("Error while processing pasted images", e);
+    setError(parseError(e));
+    return null;
+  } finally {
+    setProcessingImages(false);
+  }
+};
   async function handleUpload(files: FileList | null) {
     if (!files?.length) return;
     try {
@@ -558,13 +545,192 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
     setUrlToInsert("");
   }
 
+  // CHANGE in saveItem(): run paste-image processing before save
+  async function saveItem() {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Ensure pasted/dragged images are uploaded + URLs fixed
+      const processedHtml = await processEditorImages();
+      const contentToSave = processedHtml ?? descriptionHtml;
+
+      const list = sp.web.lists.getById(listId);
+
+      const body: any = {
+        Title: title,
+        VaughnContent: contentToSave,
+        Abstract: abstractText,
+        PublishingRollupImage: rollupImageUrl ? { Url: rollupImageUrl, Description: "Rollup" } : null,
+        PublishingContactId: publishingContactId ?? null,
+        Department: department || null,
+        PublishingSource: publishingSource || null,
+        ArticleDate: articleDate ? articleDate : null
+        // DO NOT try to set OData__ModerationStatus directly
+      };
+
+      if (icymSelected.length > 0) {
+        body.InCaseYouMissedId = icymSelected;
+      }
+
+      let itemId: number;
+
+      if (editingItem) {
+        await list.items.getById(editingItem.Id).update(body);
+        itemId = editingItem.Id;
+
+        if (icymSelected.length === 0) {
+          await list.items.getById(itemId).update({ InCaseYouMissedId: [] });
+        }
+      } else {
+        const addRes = await list.items.add(body);
+        itemId = addRes.data.Id;
+      }
+
+      setIsPanelOpen(false);
+      await loadItems();
+    } catch (e) {
+      setError(parseError(e));
+      setLoading(false);
+    }
+  }
+
+  // Delete flow
+  const [deleteTarget, setDeleteTarget] = useState<IListItem | null>(null);
+  function confirmDelete(item: IListItem) { setDeleteTarget(item); }
+  async function doDelete() {
+    if (!deleteTarget) return;
+    try {
+      setLoading(true);
+      const list = sp.web.lists.getById(listId);
+      await list.items.getById(deleteTarget.Id).recycle();
+      setDeleteTarget(null);
+      await loadItems();
+    } catch (e) {
+      setError(parseError(e));
+      setLoading(false);
+    }
+  }
+
+  // accessors for sorting per column
+  const accessors: Record<string, (i: IListItem) => string> = {
+    col_title: (i) => i.Title || "",
+    col_author: (i) => i.Author?.Title || "",
+    col_pub: (i) => (i.Published ? "Approved" : "Pending"),
+    col_dept: (i) => i.Department || "None",
+    col_src: (i) => i.PublishingSource || "",
+    col_rollup: (i) => i.PublishingRollupImageUrl || "",
+    col_artdate: (i) => i.ArticleDate || "",
+  };
+
+  function tsOf(i: IListItem): number {
+    const s = accessors.col_artdate(i);
+    const n = s ? new Date(s).getTime() : NaN;
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function onColumnClick(ev?: React.MouseEvent<HTMLElement>, column?: IColumn) {
+    if (!column) return;
+    const newKey = column.key;
+    if (newKey === sortKey) {
+      setSortDesc(!sortDesc);
+    } else {
+      setSortKey(newKey);
+      setSortDesc(false);
+    }
+  }
+
+  function stripHtml(html?: string) {
+    if (!html) return "";
+    return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  const haystack = (i: IListItem) => {
+    const parts = [
+      i.Title,
+      i.Author?.Title,
+      i.Author?.EMail,
+      i.Department,
+      i.PublishingSource,
+      i.Abstract,
+      i.PublishingRollupImageUrl,
+      i.Published ? "approved" : "pending",
+      stripHtml(i.Description),
+      i.ArticleDate,
+      i.Created,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return parts;
+  };
+
+  const displayItems = useMemo(() => {
+    let rows = items;
+
+    if (search) {
+      rows = rows.filter((i) => haystack(i).includes(search));
+    }
+
+    if (sortKey === "col_artdate") {
+      const sorted = [...rows].sort((a, b) => tsOf(a) - tsOf(b));
+      return sortDesc ? sorted.reverse() : sorted;
+    }
+
+    const acc = accessors[sortKey] || accessors["col_title"];
+    const sorted = [...rows].sort((a, b) => {
+      const av = acc(a).toLocaleLowerCase();
+      const bv = acc(b).toLocaleLowerCase();
+      if (av < bv) return -1;
+      if (av > bv) return 1;
+      return 0;
+    });
+
+    return sortDesc ? sorted.reverse() : sorted;
+  }, [items, search, sortKey, sortDesc]);
+
+  // Image Picker logic
+  useEffect(() => {
+    if (!isImagePickerOpen || !currentFolder) return;
+    (async () => {
+      try {
+        setPickerError(null);
+        let spImg = spfi('https://vaughnconstruction.sharepoint.com/news').using(SPFx(context));
+        const folder = await spImg.web.getFolderByServerRelativePath(currentFolder);
+        const [subs, files] = await Promise.all([folder.folders(), folder.files()]);
+        setFolderSubfolders(subs);
+        setFolderFiles(files);
+
+        const parts = currentFolder.replace(/^\/+/, "").split("/");
+        const baseIndex = parts.findIndex((p) => p.toLowerCase() === "publishingimages");
+        const trailParts = parts.slice(0, baseIndex + 1);
+        const crumbs: IBreadcrumbItem[] = trailParts.map((p, idx) => {
+          const path = "/" + parts.slice(0, idx + 1).join("/");
+          return { key: path, text: idx === 0 ? (imagesWebServerRelativeUrl.replace(/^\/+/, "")) : p, onClick: () => setCurrentFolder(path) } as IBreadcrumbItem;
+        });
+        const after = parts.slice(baseIndex + 1);
+        after.forEach((seg, i) => {
+          const path = "/" + parts.slice(0, baseIndex + 2 + i).join("/");
+          crumbs.push({ key: path, text: seg, onClick: () => setCurrentFolder(path) });
+        });
+        setFolderTrail(crumbs);
+      } catch (e) {
+        setPickerError(parseError(e));
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isImagePickerOpen, currentFolder]);
+
   const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]);
 
   return (
     <div className="p-4">
       <Stack tokens={{ childrenGap: 12 }}>
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-          <a href="https://vaughnconstruction.sharepoint.com/sites/Intranet/Lists/TestWeeklyWords/AllItems.aspx" target="_blank" rel="noopener noreferrer">  <h2 style={{ margin: 0 }}>Weekly Words Management</h2></a>
+          <a href="https://vaughnconstruction.sharepoint.com/sites/Intranet/Lists/TestWeeklyWords/AllItems.aspx" target="_blank" rel="noopener noreferrer">
+            <h2 style={{ margin: 0 }}>Weekly Words Management</h2>
+          </a>
           <PrimaryButton text="Add new" onClick={openAddPanel} iconProps={{ iconName: "Add" }} />
         </Stack>
 
@@ -589,7 +755,6 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
           isHeaderVisible
         />
 
-
         {loading && <span>Loading…</span>}
       </Stack>
 
@@ -605,7 +770,7 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
         <Stack tokens={{ childrenGap: 12 }}>
           <TextField label="Title" required value={title} onChange={(_, v) => setTitle(v || "")} />
 
-          <Stack horizontal tokens={{ childrenGap: 8 }}>
+          <Stack horizontal tokens={{ childrenGap: 8 }} verticalAlign="end">
             <PrimaryButton
               text="Insert image"
               iconProps={{ iconName: "Photo" }}
@@ -620,7 +785,13 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
               placeholder="https://…"
               value={urlToInsert}
               onChange={(_, v) => setUrlToInsert(v || "")}
-              styles={{ root: { width: 320 } }}
+              styles={{ root: { width: 260 } }}
+            />
+            <DefaultButton
+              text={processingImages ? "Processing images…" : "Process pasted images"}
+              iconProps={{ iconName: "Photo2" }}
+              disabled={processingImages}
+              onClick={async () => { await processEditorImages(); }}
             />
           </Stack>
 
@@ -629,60 +800,14 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
               Page Content
             </label>
 
-            <CKEditor
-              editor={ClassicEditor}
-              data={descriptionHtml || ""}
-              onReady={(editor: any) => {
-                editorRef.current = editor;
-                editor.plugins.get("FileRepository").createUploadAdapter = (loader: any) =>
-                  new SPImageUploadAdapter(
-                    loader,
-                    context,
-                    currentFolder || `${imagesWebServerRelativeUrl}/PublishingImages`
-                  );
+            <JoditEditor
+              ref={(instance) => {
+                editorRef.current = instance;
               }}
-              onChange={(_: any, editor: any) => {
-                setDescriptionHtml(editor.getData());
-              }}
-              config={{
-                toolbar: [
-                  "heading",
-                  "|",
-                  "bold",
-                  "italic",
-                  "underline",
-                  "strikethrough",
-                  "|",
-                  "bulletedList",
-                  "numberedList",
-                  "todoList",
-                  "|",
-                  "alignment",
-                  "outdent",
-                  "indent",
-                  "|",
-                  "link",
-                  "insertTable",
-                  "imageUpload",
-                  "blockQuote",
-                  "codeBlock",
-                  "|",
-                  "undo",
-                  "redo",
-                ],
-                image: {
-                  toolbar: [
-                    "imageTextAlternative",
-                    "toggleImageCaption",
-                    "imageStyle:inline",
-                    "imageStyle:block",
-                    "imageStyle:side",
-                  ],
-                },
-                table: {
-                  contentToolbar: ["tableColumn", "tableRow", "mergeTableCells", "toggleTableCaption"],
-                },
-              }}
+              value={descriptionHtml || ""}
+              config={joditConfig}
+              onBlur={(newContent) => setDescriptionHtml(newContent)}
+              onChange={() => { }}
             />
           </div>
 
@@ -726,13 +851,12 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
                 label="Department"
                 placeholder="Select department"
                 options={departmentOptions}
-                selectedKey={department ?? "__NONE__"}               
+                selectedKey={department ?? "__NONE__"}
                 onChange={(_, opt) => {
                   const key = (opt?.key as string) || "__NONE__";
                   setDepartment(key === "__NONE__" ? undefined : (opt!.key as string));
                 }}
               />
-
             </Stack.Item>
 
             <Stack.Item grow={1}>
@@ -746,7 +870,6 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
               />
             </Stack.Item>
           </Stack>
-
 
           <TextField
             label="Abstract"
@@ -872,8 +995,9 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
               <h4 style={{ marginTop: 0 }}>Images</h4>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
                 {folderFiles
-                  .filter((file: any) => new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"])
-                    .has((file.Name || "").toLowerCase().replace(/^.*(\.[^.]+)$/, "$1")))
+                  .filter((file: any) =>
+                    imageExtensions.has((file.Name || "").toLowerCase().replace(/^.*(\.[^.]+)$/, "$1"))
+                  )
                   .map((file: any) => (
                     <div key={file.UniqueId} style={{ border: "1px solid #eee", borderRadius: 8, padding: 8 }}>
                       <div style={{ aspectRatio: "1/1", overflow: "hidden", borderRadius: 6, marginBottom: 6 }}>

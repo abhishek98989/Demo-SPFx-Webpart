@@ -1,0 +1,12 @@
+/* Make sure Jodit’s overlay positions relative to the editor, not the page */
+.jodit-container { position: relative !important; }
+
+/* If an overlay is ever orphaned, don't let it hijack clicks */
+.jodit-selection,
+.jodit-resizer {
+  pointer-events: auto; /* allow handles to work normally */
+}
+.ms-Panel .jodit-selection,
+.ms-Panel .jodit-resizer {
+  /* guard: if stale, clicking outside makes it disappear via our listeners */
+}
