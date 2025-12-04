@@ -60,7 +60,6 @@ export const WeeklyWordsPostDropdown: React.FC<any> = ({ listId, context, siteUr
           "OData__ModerationStatus"
         )
         .expand("PublishingContact")
-        .filter(`ArticleDate le datetime'${todayISO}'`)
         .orderBy("ArticleDate", false)(); // newest first
 
       if (items && items.length > 0) {

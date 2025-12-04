@@ -164,8 +164,10 @@ const NewsManager: React.FC<INewsManagerProps> = (props) => {
         "hr", "eraser", "fullsize", "selectall", "undo", "redo"
       ],
       allowResizeX: true,
+      tableAllowCellResize: true,
       allowResizeY: true,
       imageDefaultWidth: 300,
+        allowResizeTags: new Set(['img', 'iframe', 'table']),
       enableDragAndDropFileToEditor: true,
       // let Jodit handle paste normally (images will be base64/blob)
     }),
