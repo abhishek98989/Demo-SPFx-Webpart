@@ -5,7 +5,7 @@ export interface ICustomDocumentSearchProps {
 
   /** New: controls UI mode from property pane */
   searchMode: 'SearchBar' | 'SearchWithResult';
-
+msGraphClientFactory:any;
   // default sample props (keep them if already there)
   isDarkTheme: boolean;
   environmentMessage: string;

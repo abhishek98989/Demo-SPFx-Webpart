@@ -13,4 +13,15 @@ build.rig.getTasks = function () {
   return result;
 };
 
+build.configureWebpack.mergeConfig({
+  additionalConfiguration: config => {
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      timers: require.resolve('timers-browserify'),
+    };
+    return config;
+  },
+});
+
 build.initialize(require('gulp'));

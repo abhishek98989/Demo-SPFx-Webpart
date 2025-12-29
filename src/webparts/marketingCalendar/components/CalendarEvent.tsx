@@ -99,13 +99,15 @@ export default function ModernCalendar(props: any) {
             { key: 'Interview Prep', text: 'Interview Prep' },
             { key: 'Other', text: 'Other' }
           ]
-        : calendarTitle === 'Company Calendar'
-        ? [
-            { key: 'Safety', text: 'Safety' },
-            { key: 'Ops', text: 'Ops' },
-            { key: 'HR', text: 'HR' },
-            { key: 'Other', text: 'Other' }
-          ]
+      : calendarTitle === 'Company Calendar'
+? [
+    { key: 'Safety', text: 'Safety' },
+    { key: 'Ops', text: 'Ops' },
+    { key: 'Other', text: 'Other' },
+    { key: 'Vaughn Outdoors', text: 'Vaughn Outdoors' },
+    { key: 'VaughnLife', text: 'VaughnLife' },
+    { key: 'HR', text: 'HR' }
+  ]
         : [];
 
     // Always append N/A at the end (avoid dupes)
@@ -149,20 +151,26 @@ export default function ModernCalendar(props: any) {
     [NA_CATEGORY]: '#ffffff',
   };
 
-  const categoryOptionsColorTraining: Record<string, string> = {
-    'Safety': '#ff0000',
-    'Ops': '#3174ad',
-    'HR': '#107c10',
-    'Other': '#ffff00',
-    [NA_CATEGORY]: '#605e5c',
-  };
-  const categoryOptionsFontColorTraining: Record<string, string> = {
-    'Safety': '#ffffff',
-    'Ops': '#ffffff',
-    'HR': '#ffffff',
-    'Other': '#000000',
-    [NA_CATEGORY]: '#ffffff',
-  };
+const categoryOptionsColorTraining: Record<string, string> = {
+  'Safety': '#ff0000',          // red
+  'Ops': '#3174ad',             // blue
+  'Other': '#ffff00',           // yellow
+  'Vaughn Outdoors': '#8b4513', // brown
+  'VaughnLife': '#107c10',      // green
+  'HR': '#ff8c00',              // orange
+  [NA_CATEGORY]: '#605e5c',     // grey
+};
+
+ const categoryOptionsFontColorTraining: Record<string, string> = {
+  'Safety': '#ffffff',
+  'Ops': '#ffffff',
+  'Other': '#000000',
+  'Vaughn Outdoors': '#ffffff',
+  'VaughnLife': '#ffffff',
+  'HR': '#ffffff',
+  [NA_CATEGORY]: '#ffffff',
+};
+
 
   // Build palette **only** for categories in categoryOptions (plus N/A already present)
   const categoryPalette: Record<string, { bg: string; fg: string }> = React.useMemo(() => {

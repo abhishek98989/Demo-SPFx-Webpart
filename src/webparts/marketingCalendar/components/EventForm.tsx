@@ -114,14 +114,16 @@ const EventForm: React.FC<IEventFormProps> = (props) => {
         { key: 'Interview Prep', text: 'Interview Prep' },
         { key: 'Other', text: 'Other' }
       ]);
-    } else if (props?.CalendarTitle == 'Company Calendar') {
-      setCategoryOptions([
-        { key: 'Safety', text: 'Safety' },
-        { key: 'Ops', text: 'Ops' },
-        { key: 'HR', text: 'HR' },
-        { key: 'Other', text: 'Other' }
-      ]);
-    }
+   } else if (props?.CalendarTitle == 'Company Calendar') {
+  setCategoryOptions([
+    { key: 'Safety', text: 'Safety' },
+    { key: 'Ops', text: 'Ops' },
+    { key: 'Other', text: 'Other' },
+    { key: 'Vaughn Outdoors', text: 'Vaughn Outdoors' },
+    { key: 'VaughnLife', text: 'VaughnLife' },
+    { key: 'HR', text: 'HR' }
+  ]);
+}
   }, [props.event]);
 
   // Validate dates whenever they change

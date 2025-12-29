@@ -15,6 +15,7 @@ import { ICustomDocumentSearchProps } from './components/ICustomDocumentSearchPr
 
 export interface ICustomDocumentSearchWebPartProps {
   description: string;
+  msGraphClientFactory: any;
   searchMode: 'SearchBar' | 'SearchWithResult';
 }
 
@@ -29,7 +30,7 @@ export default class CustomDocumentSearchWebPart extends BaseClientSideWebPart<I
       {
         description: this.properties.description,
         context: this.context,
-
+msGraphClientFactory: this.context.msGraphClientFactory,
         // NEW: pass selected mode, fallback to SearchWithResult
         searchMode: this.properties.searchMode || 'SearchWithResult',
 
