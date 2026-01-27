@@ -19,6 +19,7 @@ import {
 } from '@fluentui/react';
 import { useEffect, useState } from 'react';
 import { AIEnabledInputField } from './AIEnabledInputField';
+import { Newtable } from './Newtable';
 
 // Custom Comment Card component to replace the PnP one
 interface ICustomCommentCardProps {
@@ -354,21 +355,6 @@ export default function ListItemComments(props: IListItemCommentsProps): React.R
   };
 
   return (
-    <section className={`${styles.listItemComments} ${props.hasTeamsContext ? styles.teams : ''}`}>
-      <div className={styles.welcome}>
-        <h2>List Item Comments</h2>
-        {itemId && listName ? (
-          <div>Showing comments for item #{itemId} in list "{listName}"</div>
-        ) : (
-          <div className={styles.warning}>
-            {!listName && <div>Please configure the list name in webpart properties.</div>}
-            {!itemId && <div>No item ID found in URL parameter.</div>}
-          </div>
-        )}
-      </div>
-      <div className={styles.container}>
-        {renderContent()}
-      </div>
-    </section>
+   <Newtable/>
   );
 }

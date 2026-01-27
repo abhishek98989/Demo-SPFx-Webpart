@@ -285,6 +285,17 @@ interface ISearchResult {
   /** Corporate responsibilities */
   Who?: string;
 }
+const SEARCH_SOURCES_INFO = [
+  { label: "Resource Library", url: `https://vaughnconstruction.sharepoint.com/Forms/Forms/AllItems.aspx` },
+  { label: "Weekly Words", url: `https://vaughnconstruction.sharepoint.com/news/Pages/default.aspx` },
+  { label: "Lessons Learned", url: `https://vaughnconstruction.sharepoint.com/ll/SitePages/Default.aspx` },
+  { label: "IT Blogs", url: `https://vaughnconstruction.sharepoint.com/sites/ITSite` },
+  { label: "People Directory", url: `https://vaughnconstruction.sharepoint.com/SitePages/People.aspx` },
+  { label: "Marketing Calendar", url: `https://vaughnconstruction.sharepoint.com/Sites/Marketing` },
+  { label: "Company Calendar", url: `https://vaughnconstruction.sharepoint.com/sites/OPSSite/SitePages/Company-Calendar.aspx` },
+  { label: "Locations", url:'https://vaughnconstruction.sharepoint.com/SitePages/Locations.aspx' },
+  { label: "Corporate Responsibilities", url: `https://vaughnconstruction.sharepoint.com/SitePages/Corporate-Responsibilities.aspx` },
+];
 
 // Simple mapping for badges
 const sourceLabels: Record<ResultSource, string> = {
@@ -1392,18 +1403,43 @@ const SearchDocuments: React.FC<ISearchDocumentsProps> = ({
     return (
       <div style={{ padding: 20 }}>
         <Stack tokens={{ childrenGap: 8 }} styles={{ root: { maxWidth: 600 } }}>
-          <TextField
-            label="Search"
-            placeholder="Type search text…"
-            value={query}
-            onChange={(_e, v) => setQuery(v || "")}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                runSearch();
-              }
-            }}
-          />
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
+  <TextField
+    label="Search"
+    placeholder="Type search text…"
+    value={query}
+    onChange={(_e, v) => setQuery(v || "")}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        runSearch();
+      }
+    }}
+    styles={{ root: { flex: 1 } }}
+  />
+
+  <TooltipHost
+    content={
+      <div style={{ maxWidth: 260 }}>
+        <div style={{ fontWeight: 600, marginBottom: 6 }}>
+          Searches across:
+        </div>
+        <ul style={{ paddingLeft: 16, margin: 0 }}>
+          {SEARCH_SOURCES_INFO.map((s) => (
+            <li key={s.label}>{s.label}</li>
+          ))}
+        </ul>
+      </div>
+    }
+  >
+    <IconButton
+      iconProps={{ iconName: "Info" }}
+      ariaLabel="Search sources info"
+      styles={{ root: { marginBottom: 2 } }}
+    />
+  </TooltipHost>
+</div>
+
           <PrimaryButton text="Search" onClick={() => runSearch()} />
         </Stack>
       </div>
@@ -1418,10 +1454,30 @@ const SearchDocuments: React.FC<ISearchDocumentsProps> = ({
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
           <div>
-            <h2 style={{ margin: 0 }}>Advanced Search</h2>
-            <p style={{ margin: "4px 0 0", color: "#605e5c" }}>
-              Search across documents, pages, people, lists, and calendars in one place.
-            </p>
+           <h2 style={{ margin: 0 }}>Advanced Search</h2>
+
+<p style={{ margin: "4px 0 6px", color: "#605e5c" }}>
+  This search looks across the following sources:
+</p>
+
+<div style={{ fontSize: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+  {SEARCH_SOURCES_INFO.map((s) => (
+    <a
+      key={s.label}
+      href={s.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        color: "#0078d4",
+        textDecoration: "none",
+        fontWeight: 500,
+      }}
+    >
+      {s.label}
+    </a>
+  ))}
+</div>
+
           </div>
 
           {results.length > 0 && (
