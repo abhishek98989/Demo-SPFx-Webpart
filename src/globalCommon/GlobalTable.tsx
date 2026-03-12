@@ -15,9 +15,8 @@ import {
   createTableColumn,
 } from '@fluentui/react-components';
 
-// Define the props for our component
 export interface ISortableDetailsListProps {
-  items: any[]; // The data to display
+  items: any[];
   columns: Array<{
     key: string;
     name: string;
@@ -27,147 +26,162 @@ export interface ISortableDetailsListProps {
     isResizable?: boolean;
     isSorted?: boolean;
     isSortedDescending?: boolean;
-  }>; // Column configuration
-  isLoading?: boolean; // Optional flag for showing a loading shimmer
-  maxHeight?: string; // Optional max height, defaults to calculated height
-  rowHeight?: number; // Height of each row (default: 42px)
-  headerHeight?: number; // Height of header (default: 32px)
+    onRender?: (item: any) => React.ReactNode;
+  }>;
+  isLoading?: boolean;
+  constrainMode?: number;
+  layoutMode?: number;
+  maxHeight?: string;
+  rowHeight?: number;
+  headerHeight?: number;
 }
+
+// Compute a definitive pixel width for each column
+const resolveColumnWidth = (col: ISortableDetailsListProps['columns'][number]): number => {
+  if (col.maxWidth) return col.maxWidth;
+  if (col.minWidth) return col.minWidth;
+  return 150;
+};
 
 export const SortableDetailsList: React.FunctionComponent<ISortableDetailsListProps> = (props) => {
   const [calculatedHeight, setCalculatedHeight] = useState<string>('400px');
   const containerRef = useRef<HTMLDivElement>(null);
 
   const rowHeight = props.rowHeight || 42;
-  const headerHeight = props.headerHeight || 48; // Fluent UI v9 header is taller
+  const headerHeight = props.headerHeight || 48;
 
-  // Calculate optimal table height based on content
+  // Pre-compute column widths once so header and body share identical values
+  const columnWidths = React.useMemo(
+    () => props.columns.map(resolveColumnWidth),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.columns.map(c => `${c.key}:${c.minWidth}:${c.maxWidth}`).join(',')]
+  );
+
+  const totalTableWidth = columnWidths.reduce((sum, w) => sum + w, 0);
+
   useEffect(() => {
     if (props.items.length > 0 && !props.maxHeight) {
-      const contentHeight = (props.items.length * rowHeight) + headerHeight + 20;
-      const availableHeight = window.innerHeight;
-      const reservedSpace = 200;
-      const maxAllowedHeight = availableHeight - reservedSpace;
-      const optimalHeight = Math.min(contentHeight, maxAllowedHeight);
-      const finalHeight = Math.max(optimalHeight, 300);
-      
+      const contentHeight = props.items.length * rowHeight + headerHeight + 20;
+      const maxAllowedHeight = window.innerHeight - 200;
+      const finalHeight = Math.max(Math.min(contentHeight, maxAllowedHeight), 300);
       setCalculatedHeight(`${finalHeight}px`);
     }
   }, [props.items.length, props.maxHeight, rowHeight, headerHeight]);
 
-  // Add CSS for sticky header and scrolling
   useEffect(() => {
     const styleId = 'fluent-table-styles';
-    let existingStyle = document.getElementById(styleId);
-    
-    if (!existingStyle) {
-      const style = document.createElement('style');
-      style.id = styleId;
-      style.innerHTML = `
-        .scrollable-table-container {
-          border: 1px solid var(--colorNeutralStroke2);
-          border-radius: var(--borderRadiusMedium);
-          background-color: var(--colorNeutralBackground1);
-          position: relative;
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-        }
+    if (document.getElementById(styleId)) return;
 
-        .scrollable-table-container .fui-Table {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .scrollable-table-container .fui-TableHeader {
-          flex-shrink: 0;
-          position: sticky;
-          top: 0;
-          z-index: 100;
-          background-color: var(--colorNeutralBackground2);
-          border-bottom: 1px solid var(--colorNeutralStroke2);
-          box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
-
-        .scrollable-table-container .fui-TableBody {
-          flex: 1;
-          overflow-y: auto;
-          overflow-x: hidden;
-        }
-
-        .scrollable-table-container .fui-TableRow {
-          border-bottom: 1px solid var(--colorNeutralStroke3);
-        }
-
-        .scrollable-table-container .fui-TableRow:hover {
-          background-color: var(--colorSubtleBackgroundHover);
-        }
-
-        /* Loading overlay */
-        .table-loading-overlay {
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-color: rgba(255, 255, 255, 0.8);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 200;
-          font-size: 16px;
-          color: var(--colorNeutralForeground1);
-        }
-
-        /* Custom scrollbar */
-        .scrollable-table-container .fui-TableBody::-webkit-scrollbar {
-          width: 8px;
-        }
-
-        .scrollable-table-container .fui-TableBody::-webkit-scrollbar-track {
-          background: var(--colorNeutralBackground3);
-          border-radius: 4px;
-        }
-
-        .scrollable-table-container .fui-TableBody::-webkit-scrollbar-thumb {
-          background: var(--colorNeutralStroke1);
-          border-radius: 4px;
-        }
-
-        .scrollable-table-container .fui-TableBody::-webkit-scrollbar-thumb:hover {
-          background: var(--colorNeutralStroke2);
-        }
-      `;
-      document.head.appendChild(style);
-    }
-
-    return () => {
-      const styleElement = document.getElementById(styleId);
-      if (styleElement) {
-        styleElement.remove();
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.innerHTML = `
+      .scrollable-table-wrapper {
+        border: 1px solid var(--colorNeutralStroke2);
+        border-radius: var(--borderRadiusMedium);
+        background-color: var(--colorNeutralBackground1);
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
       }
-    };
+
+      /* ── Sticky-header scroll trick ─────────────────────────────────────
+         The outer wrapper clips overflow.
+         An inner scroll div handles both axes.
+         The header row is sticky-top inside that scroll div.
+      ─────────────────────────────────────────────────────────────────── */
+      .scrollable-table-inner {
+        overflow: auto;
+        flex: 1;
+      }
+
+      /* Prevent Fluent from overriding our explicit cell widths */
+      .scrollable-table-wrapper .fui-Table {
+        border-collapse: collapse;
+        /* width is set inline to match sum of columns */
+      }
+
+      .scrollable-table-wrapper .fui-TableHeader {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background-color: var(--colorNeutralBackground2);
+      }
+
+      .scrollable-table-wrapper .fui-TableHeaderCell {
+        box-sizing: border-box;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        flex-shrink: 0;
+        flex-grow: 0;
+        align-items: center;
+      }
+
+      .scrollable-table-wrapper .fui-TableCell {
+        box-sizing: border-box;
+        overflow: visible;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        flex-shrink: 0;
+        flex-grow: 0;
+        /* Let cell height grow with content */
+        height: auto !important;
+        align-items: flex-start;
+      }
+
+      /* Allow the cell layout inner div to wrap too */
+      .scrollable-table-wrapper .fui-TableCell .fui-TableCellLayout {
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        width: 100%;
+      }
+
+      .scrollable-table-wrapper .fui-TableRow {
+        border-bottom: 1px solid var(--colorNeutralStroke3);
+        display: flex; /* keep cells in a row */
+      }
+
+      .scrollable-table-wrapper .fui-TableRow:hover {
+        background-color: var(--colorSubtleBackgroundHover);
+      }
+
+      /* Loading overlay */
+      .table-loading-overlay {
+        position: absolute;
+        inset: 0;
+        background-color: rgba(255, 255, 255, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 200;
+        font-size: 16px;
+        color: var(--colorNeutralForeground1);
+      }
+
+      /* Scrollbar */
+      .scrollable-table-inner::-webkit-scrollbar { width: 8px; height: 8px; }
+      .scrollable-table-inner::-webkit-scrollbar-track { background: var(--colorNeutralBackground3); border-radius: 4px; }
+      .scrollable-table-inner::-webkit-scrollbar-thumb { background: var(--colorNeutralStroke1); border-radius: 4px; }
+      .scrollable-table-inner::-webkit-scrollbar-thumb:hover { background: var(--colorNeutralStroke2); }
+    `;
+    document.head.appendChild(style);
+
+    return () => { document.getElementById(styleId)?.remove(); };
   }, []);
 
-  // Convert props.columns to Fluent UI v9 column definitions
-  const tableColumns: TableColumnDefinition<any>[] = props.columns.map(col => 
+  const tableColumns: TableColumnDefinition<any>[] = props.columns.map(col =>
     createTableColumn<any>({
       columnId: col.key,
       compare: (a, b) => {
         const aVal = a[col.fieldName];
         const bVal = b[col.fieldName];
-        
-        // Handle null/undefined values
         if (aVal == null && bVal == null) return 0;
         if (aVal == null) return -1;
         if (bVal == null) return 1;
-        
-        // Convert to strings for comparison
-        const aStr = String(aVal).toLowerCase();
-        const bStr = String(bVal).toLowerCase();
-        
-        return aStr.localeCompare(bStr);
+        return String(aVal).toLowerCase().localeCompare(String(bVal).toLowerCase());
       },
     })
   );
@@ -176,101 +190,99 @@ export const SortableDetailsList: React.FunctionComponent<ISortableDetailsListPr
     getRows,
     sort: { getSortDirection, toggleColumnSort, sort },
   } = useTableFeatures(
-    {
-      columns: tableColumns,
-      items: props.items,
-    },
+    { columns: tableColumns, items: props.items },
     [
       useTableSort({
-        defaultSortState: props.columns.find(col => col.isSorted) 
-          ? { 
-              sortColumn: props.columns.find(col => col.isSorted)!.key, 
-              sortDirection: props.columns.find(col => col.isSorted)!.isSortedDescending ? "descending" : "ascending" 
-            }
-          : undefined,
+        defaultSortState: (() => {
+          const sortedCol = props.columns.find(c => c.isSorted);
+          return sortedCol
+            ? { sortColumn: sortedCol.key, sortDirection: sortedCol.isSortedDescending ? 'descending' : 'ascending' }
+            : undefined;
+        })(),
       }),
     ]
   );
 
   const headerSortProps = (columnId: TableColumnId) => ({
-    onClick: (e: React.MouseEvent) => {
-      toggleColumnSort(e, columnId);
-    },
+    onClick: (e: React.MouseEvent) => toggleColumnSort(e, columnId),
     sortDirection: getSortDirection(columnId),
   });
 
   const rows = sort(getRows());
   const containerHeight = props.maxHeight || calculatedHeight;
 
-const renderCellContent = (item: any, fieldName: string, column: any) => {
-  // If column has custom renderer, use it
-  if (column.onRender) {
-    return column.onRender(item);
-  }
+  const renderCellContent = (item: any, col: ISortableDetailsListProps['columns'][number]) => {
+    if (col.onRender) return col.onRender(item);
+    const value = item[col.fieldName];
+    if (React.isValidElement(value)) return value;
+    if (value == null) return '';
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    if (typeof value === 'number') return value.toLocaleString();
+    return String(value);
+  };
 
-  const value = item[fieldName];
-
-  if (React.isValidElement(value)) return value;
-  if (value == null) return '';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (typeof value === 'number') return value.toLocaleString();
-
-  return String(value);
-};
-
-
+  // Shared style factory — same logic for header and body cells
+  const cellStyle = (colIndex: number): React.CSSProperties => ({
+    width: columnWidths[colIndex],
+    minWidth: columnWidths[colIndex],
+    maxWidth: columnWidths[colIndex],
+    boxSizing: 'border-box',
+    overflow: 'hidden',
+    flexShrink: 0,
+    flexGrow: 0,
+  });
 
   return (
-    <div 
-      ref={containerRef} 
-      className="scrollable-table-container"
-      style={{ 
-        height: containerHeight,
-        width: '100%'
-      }}
+    <div
+      ref={containerRef}
+      className="scrollable-table-wrapper"
+      style={{ height: containerHeight, width: '100%' }}
     >
-      <Table 
-        sortable 
-        aria-label="Sortable table with scrolling"
-        style={{ height: '100%' }}
-      >
-        <TableHeader>
-          <TableRow>
-            {props.columns.map((column) => (
-              <TableHeaderCell 
-                key={column.key}
-                {...headerSortProps(column.key)}
-                style={{
-                  minWidth: column.minWidth,
-                  maxWidth: column.maxWidth,
-                  width: column.maxWidth || column.minWidth
-                }}
-              >
-                {column.name}
-              </TableHeaderCell>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map(({ item }, index) => (
-            <TableRow key={`row-${index}`}>
-             {props.columns.map((column) => (
-  <TableCell key={`${index}-${column.key}`} style={{ minWidth: column.minWidth, maxWidth: column.maxWidth ,width: column.maxWidth || column.minWidth}}>
-    <TableCellLayout>
-      {renderCellContent(item, column.fieldName, column)}
-    </TableCellLayout>
-  </TableCell>
-))}
-
+      <div className="scrollable-table-inner">
+        <Table
+          sortable
+          aria-label="Sortable data table"
+          style={{
+            width: totalTableWidth,
+            minWidth: totalTableWidth,
+            tableLayout: 'fixed',
+          }}
+        >
+          <TableHeader>
+            <TableRow style={{ display: 'flex', width: totalTableWidth }}>
+              {props.columns.map((column, colIndex) => (
+                <TableHeaderCell
+                  key={column.key}
+                  {...headerSortProps(column.key)}
+                  style={cellStyle(colIndex)}
+                >
+                  {column.name}
+                </TableHeaderCell>
+              ))}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      
+          </TableHeader>
+
+          <TableBody>
+            {rows.map(({ item }, rowIndex) => (
+              <TableRow key={`row-${rowIndex}`} style={{ display: 'flex', width: totalTableWidth }}>
+                {props.columns.map((column, colIndex) => (
+                  <TableCell
+                    key={`${rowIndex}-${column.key}`}
+                    style={cellStyle(colIndex)}
+                  >
+                    <TableCellLayout>
+                      {renderCellContent(item, column)}
+                    </TableCellLayout>
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
       {props.isLoading && (
-        <div className="table-loading-overlay">
-          Loading...
-        </div>
+        <div className="table-loading-overlay">Loading…</div>
       )}
     </div>
   );

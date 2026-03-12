@@ -27,7 +27,7 @@ import {
 } from '@fluentui/react';
 import { LivePersona } from '@pnp/spfx-controls-react/lib/LivePersona';
 import { ServiceScope } from '@microsoft/sp-core-library';
-import styles from './PeopleLibrary.module.scss'; // Assuming this styles file exists
+import styles from './PeopleLibrary.module.scss';
 
 // Interface for user data from Microsoft Graph
 interface IUserData {
@@ -51,34 +51,136 @@ interface IUsersTableProps {
     context: WebPartContext;
 }
 
-// Photo cache to prevent duplicate requests and wrong photos
-const photoCache = new Map<string, { url: string | null; loading: boolean; error: boolean }>();
+// Enhanced photo cache with better state management
+interface PhotoCacheEntry {
+    url: string | null;
+    loading: boolean;
+    error: boolean;
+    timestamp: number;
+}
 
-// LivePersonaCard component with improved photo loading and caching
+const photoCache = new Map<string, PhotoCacheEntry>();
+const pendingPhotoRequests = new Map<string, Promise<PhotoCacheEntry>>();
+
+// Photo loading queue to prevent race conditions
+class PhotoLoadQueue {
+    private queue: Array<{ email: string; resolve: (entry: PhotoCacheEntry) => void }> = [];
+    private processing = false;
+    private graphClient: MSGraphClientV3 | null = null;
+
+    setGraphClient(client: MSGraphClientV3) {
+        this.graphClient = client;
+    }
+
+    async loadPhoto(email: string): Promise<PhotoCacheEntry> {
+        const normalizedEmail = email?.toLowerCase().trim();
+        
+        // Return cached result if available
+        const cached = photoCache.get(normalizedEmail);
+        if (cached && (cached.url || cached.error)) {
+            return cached;
+        }
+
+        // Return pending request if exists
+        const pending = pendingPhotoRequests.get(normalizedEmail);
+        if (pending) {
+            return pending;
+        }
+
+        // Create new request
+        const promise = this.fetchPhoto(normalizedEmail);
+        pendingPhotoRequests.set(normalizedEmail, promise);
+
+        try {
+            const result = await promise;
+            return result;
+        } finally {
+            pendingPhotoRequests.delete(normalizedEmail);
+        }
+    }
+
+    private async fetchPhoto(normalizedEmail: string): Promise<PhotoCacheEntry> {
+        if (!this.graphClient || !normalizedEmail) {
+            const errorEntry: PhotoCacheEntry = {
+                url: null,
+                loading: false,
+                error: true,
+                timestamp: Date.now()
+            };
+            photoCache.set(normalizedEmail, errorEntry);
+            return errorEntry;
+        }
+
+        const loadingEntry: PhotoCacheEntry = {
+            url: null,
+            loading: true,
+            error: false,
+            timestamp: Date.now()
+        };
+        photoCache.set(normalizedEmail, loadingEntry);
+
+        try {
+            const photoResponse = await this.graphClient
+                .api(`/users/${normalizedEmail}/photo/$value`)
+                .responseType(ResponseType.BLOB)
+                .get();
+
+            let blob: Blob;
+            if (photoResponse instanceof Blob) {
+                blob = photoResponse;
+            } else if (photoResponse.body instanceof Blob) {
+                blob = photoResponse.body;
+            } else {
+                blob = new Blob([photoResponse.body || photoResponse], { type: 'image/jpeg' });
+            }
+
+            const url = URL.createObjectURL(blob);
+            const successEntry: PhotoCacheEntry = {
+                url,
+                loading: false,
+                error: false,
+                timestamp: Date.now()
+            };
+            photoCache.set(normalizedEmail, successEntry);
+            return successEntry;
+        } catch (error) {
+            console.log('Photo not available for user:', normalizedEmail);
+            const errorEntry: PhotoCacheEntry = {
+                url: null,
+                loading: false,
+                error: true,
+                timestamp: Date.now()
+            };
+            photoCache.set(normalizedEmail, errorEntry);
+            return errorEntry;
+        }
+    }
+}
+
+const photoLoadQueue = new PhotoLoadQueue();
+
+// Memoized LivePersonaCard component to prevent unnecessary re-renders
 interface ILivePersonaCardProps {
     serviceScope: any;
     userEmail: string;
     displayName: string;
-    graphClient?: MSGraphClientV3;
+    userId: string; // Add unique user ID for better tracking
 }
 
-const LivePersonaCard: React.FC<ILivePersonaCardProps> = ({
+const LivePersonaCard: React.FC<ILivePersonaCardProps> = React.memo(({
     serviceScope,
     userEmail,
     displayName,
-    graphClient
+    userId
 }) => {
-    const [photoState, setPhotoState] = useState<{ url: string | null; loading: boolean; error: boolean }>({
-        url: null,
-        loading: false,
-        error: false
-    });
-    
-    const mountedRef = useRef(true);
-    const loadingRef = useRef(false);
-    
-    // Normalize email for consistent caching
     const normalizedEmail = userEmail?.toLowerCase().trim();
+    const [photoUrl, setPhotoUrl] = useState<string | null>(() => {
+        const cached = photoCache.get(normalizedEmail);
+        return cached?.url || null;
+    });
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [hasError, setHasError] = useState<boolean>(false);
+    const mountedRef = useRef(true);
 
     // Function to get initials from display name
     const getInitials = (name: string): string => {
@@ -86,113 +188,70 @@ const LivePersonaCard: React.FC<ILivePersonaCardProps> = ({
         return name.trim().split(/\s+/).map((word: string) => word?.charAt(0).toUpperCase()).join('').substring(0, 2);
     };
 
-    // Update state from cache
+    // Load photo only once when component mounts
     useEffect(() => {
-        if (!normalizedEmail) return;
-        
-        const cached = photoCache.get(normalizedEmail);
-        if (cached) {
-            setPhotoState(cached);
-        }
-    }, [normalizedEmail]);
+        mountedRef.current = true;
 
-    // Load user photo with improved caching and race condition handling
-    useEffect(() => {
         const loadPhoto = async () => {
-            if (!graphClient || !normalizedEmail || loadingRef.current) return;
-
-            // Check if already in cache
-            const cached = photoCache.get(normalizedEmail);
-            if (cached && (cached.url || cached.error)) {
-                setPhotoState(cached);
+            if (!normalizedEmail) {
+                setHasError(true);
                 return;
             }
 
-            // Prevent multiple simultaneous requests for same user
-            if (cached?.loading) return;
-
-            loadingRef.current = true;
-            const loadingState = { url: null, loading: true, error: false };
-            photoCache.set(normalizedEmail, loadingState);
-            setPhotoState(loadingState);
-
-            try {
-                // Try multiple identifiers to get the photo
-                let photoResponse;
-                try {
-                    // First try with email
-                    photoResponse = await graphClient
-                        .api(`/users/${userEmail}/photo/$value`)
-                        .responseType(ResponseType.BLOB)
-                        .get();
-                } catch (emailError) {
-                    // If email fails, try with UPN if different
-                    if (userEmail !== normalizedEmail) {
-                        photoResponse = await graphClient
-                            .api(`/users/${normalizedEmail}/photo/$value`)
-                            .responseType(ResponseType.BLOB)
-                            .get();
-                    } else {
-                        throw emailError;
-                    }
+            // Check cache first
+            const cached = photoCache.get(normalizedEmail);
+            if (cached) {
+                if (mountedRef.current) {
+                    setPhotoUrl(cached.url);
+                    setIsLoading(cached.loading);
+                    setHasError(cached.error);
                 }
+                if (cached.url || cached.error) {
+                    return; // Already loaded or failed
+                }
+            }
 
-                if (photoResponse && mountedRef.current) {
-                    let blob: Blob;
-                    if (photoResponse instanceof Blob) {
-                        blob = photoResponse;
-                    } else if (photoResponse.body instanceof Blob) {
-                        blob = photoResponse.body;
-                    } else {
-                        blob = new Blob([photoResponse.body || photoResponse], { type: 'image/jpeg' });
-                    }
-                    
-                    const url = URL.createObjectURL(blob);
-                    const successState = { url, loading: false, error: false };
-                    photoCache.set(normalizedEmail, successState);
-                    setPhotoState(successState);
+            // Load from queue
+            setIsLoading(true);
+            try {
+                const result = await photoLoadQueue.loadPhoto(normalizedEmail);
+                if (mountedRef.current) {
+                    setPhotoUrl(result.url);
+                    setIsLoading(false);
+                    setHasError(result.error);
                 }
             } catch (error) {
-                console.log('Photo not available for user:', normalizedEmail);
-                const errorState = { url: null, loading: false, error: true };
-                photoCache.set(normalizedEmail, errorState);
                 if (mountedRef.current) {
-                    setPhotoState(errorState);
+                    setIsLoading(false);
+                    setHasError(true);
                 }
-            } finally {
-                loadingRef.current = false;
             }
         };
 
         loadPhoto();
-    }, [graphClient, normalizedEmail, userEmail]);
 
-    // Cleanup on unmount
-    useEffect(() => {
         return () => {
             mountedRef.current = false;
         };
-    }, []);
+    }, [normalizedEmail]); // Only re-run if email changes
 
-    // Create persona element with consistent photo state
-    const personaElement = (
+    // Memoize persona element to prevent re-creation
+    const personaElement = useMemo(() => (
         <Persona
             text={displayName}
             size={PersonaSize.size40}
             hidePersonaDetails={true}
-            imageUrl={photoState.url || undefined}
-            imageInitials={photoState.url ? undefined : getInitials(displayName)}
+            imageUrl={photoUrl || undefined}
+            imageInitials={photoUrl ? undefined : getInitials(displayName)}
             coinSize={40}
         />
-    );
+    ), [displayName, photoUrl]);
 
     // If we have service scope and valid email, wrap with LivePersona for hover functionality
-    if (serviceScope && normalizedEmail && !photoState.error) {
+    if (serviceScope && normalizedEmail && !hasError) {
         return (
             <div style={{ position: 'relative' }}>
-                {/* Visible persona with photo */}
                 {personaElement}
-                {/* Invisible LivePersona positioned over the visible one for hover functionality */}
                 <div style={{ 
                     position: 'absolute', 
                     top: 0, 
@@ -205,25 +264,24 @@ const LivePersonaCard: React.FC<ILivePersonaCardProps> = ({
                     <LivePersona
                         serviceScope={serviceScope}
                         upn={normalizedEmail}
-                        template={
-                            <Persona
-                                text={displayName}
-                                size={PersonaSize.size40}
-                                hidePersonaDetails={true}
-                                imageUrl={photoState.url || undefined}
-                                imageInitials={photoState.url ? undefined : getInitials(displayName)}
-                                coinSize={40}
-                            />
-                        }
+                        template={personaElement}
                     />
                 </div>
             </div>
         );
     }
 
-    // Fallback to regular Persona only
     return personaElement;
-};
+}, (prevProps, nextProps) => {
+    // Custom comparison function - only re-render if these props change
+    return (
+        prevProps.userId === nextProps.userId &&
+        prevProps.userEmail === nextProps.userEmail &&
+        prevProps.displayName === nextProps.displayName
+    );
+});
+
+LivePersonaCard.displayName = 'LivePersonaCard';
 
 const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
     // State management
@@ -237,7 +295,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
     const [pageInput, setPageInput] = useState<string>('1');
     const [selectedAlphabet, setSelectedAlphabet] = useState<string>('');
     
-    // **STATE FOR COLUMN SORTING**
     const [sortedColumnKey, setSortedColumnKey] = useState<keyof IUserData | 'mobilePhone' | 'businessPhones' | 'ipPhone' | ''>('displayName');
     const [sortAscending, setSortAscending] = useState<boolean>(true);
 
@@ -252,6 +309,7 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
             try {
                 const client = await context.msGraphClientFactory.getClient('3');
                 setGraphClient(client);
+                photoLoadQueue.setGraphClient(client);
             } catch (err) {
                 setError('Failed to initialize Graph client');
                 console.error('Graph client initialization error:', err);
@@ -295,7 +353,7 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         }
     };
 
-    // Normalize phone number for searching (remove spaces, dashes, parentheses)
+    // Normalize phone number for searching
     const normalizePhone = (phone: string): string => {
         if (!phone) return '';
         return phone.replace(/[\s\-\(\)\.]/g, '');
@@ -308,7 +366,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         const term = searchTerm.toLowerCase().trim();
         const normalizedSearchTerm = normalizePhone(term);
         
-        // Search in text fields (case insensitive)
         const textFields = [
             user.displayName,
             user.mail,
@@ -323,7 +380,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         
         if (textMatch) return true;
         
-        // Search in phone numbers (normalized)
         const phoneFields = [
             user.mobilePhone,
             user.ipPhone,
@@ -340,7 +396,7 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         return phoneMatch;
     };
 
-    // **Sorting utility function**
+    // Sorting utility function
     const sortUsers = useCallback((
         data: IUserData[],
         columnKey: keyof IUserData | 'mobilePhone' | 'businessPhones' | 'ipPhone' | '',
@@ -352,7 +408,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
             let aValue: string | any;
             let bValue: string | any;
 
-            // Special handling for phone fields
             if (columnKey === 'businessPhones') {
                 aValue = a.businessPhones && a.businessPhones.length > 0 ? a.businessPhones[0] : '';
                 bValue = b.businessPhones && b.businessPhones.length > 0 ? b.businessPhones[0] : '';
@@ -362,20 +417,16 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
             } else if (columnKey === 'ipPhone') {
                 aValue = a.ipPhone || '';
                 bValue = b.ipPhone || '';
-            }
-            // General string sort for other fields
-            else {
+            } else {
                 aValue = a[columnKey as keyof IUserData] as string || '';
                 bValue = b[columnKey as keyof IUserData] as string || '';
             }
 
-            // Type check for string comparison
             if (typeof aValue === 'string' && typeof bValue === 'string') {
                 const comparison = aValue.toLowerCase().localeCompare(bValue.toLowerCase());
                 return isAscending ? comparison : -comparison;
             }
 
-            // Fallback for non-string or unknown types (treat as equivalent for sorting)
             return 0;
         });
 
@@ -390,40 +441,37 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         setError('');
 
         try {
-            // Clear photo cache when refreshing data
-            photoCache.clear();
+            // DON'T clear photo cache on refresh - keep loaded photos
+            // photoCache.clear(); // REMOVED
             
             let usersData = await fetchAllUsers(graphClient);
 
             usersData = usersData.filter(user => {
-                // 1. Only company contains "Vaughn"
                 if (user.companyName && !user.companyName.toLowerCase().includes('vaughn')) {
                     return false;
                 }
+ if (user.mail?.toLowerCase() === 'kcotie@vaughnconstruction.com') {
+        return false;
+    }
 
-                // 2. Exclude Disabled accounts
                 if (user.accountEnabled === false) {
                     return false;
                 }
 
-                // 3. Exclude Guest users
                 if (user.userType === 'Guest') {
                     return false;
                 }
 
-                // 4. Exclude #EXT# (external)
                 if (user.userPrincipalName && user.userPrincipalName.includes('#EXT#')) {
                     return false;
                 }
 
-                // 5. Exclude UPN or mail with underscores or test accounts
                 if ((user.mail && user.mail.includes('_')) || 
                     (user.userPrincipalName && user.userPrincipalName.includes('_')) || 
                     (user.userPrincipalName && user.userPrincipalName?.toLowerCase()?.includes('test'))) {
                     return false;
                 }
 
-                // 6. Exclude job titles per AD filter
                 if (user?.jobTitle) {
                     const jobTitleLower = user.jobTitle.toLowerCase();
                     const excludedTitles = ['intern', 'construction work', 'layout', 'foreman', 'instrument', 'student'];
@@ -435,7 +483,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                     }
                 }
 
-                // 7. Exclude system/service/admin accounts
                 if (user.userPrincipalName) {
                     const upnLower = user.userPrincipalName.toLowerCase();
                     if (upnLower.includes('service') || upnLower.includes('admin') || upnLower.includes('system')) {
@@ -443,12 +490,10 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                     }
                 }
 
-                // 8. Require valid email
                 if (!user.mail || user.mail.trim() === '') {
                     return false;
                 }
 
-                // 9. Require jobTitle not empty
                 if (!user.jobTitle || user.jobTitle.trim() === '') {
                     return false;
                 }
@@ -458,7 +503,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
 
             console.log(`Fetched ${usersData.length} filtered users from Azure AD`);
 
-            // Initial sort by displayName
             usersData = sortUsers(usersData, 'displayName', true);
 
             setUsers(usersData);
@@ -483,19 +527,16 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
     const processedUsers = useMemo(() => {
         let result = [...users];
 
-        // Apply alphabet filter
         if (selectedAlphabet) {
             result = result.filter(user =>
                 user.displayName?.toUpperCase().startsWith(selectedAlphabet)
             );
         }
 
-        // Apply search filter
         if (searchText.trim()) {
             result = result.filter(user => searchInData(user, searchText));
         }
 
-        // Apply column sort
         result = sortUsers(result, sortedColumnKey, sortAscending);
 
         return result;
@@ -506,14 +547,13 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         setFilteredUsers(processedUsers);
         const totalPages = Math.ceil(processedUsers.length / itemsPerPage);
         
-        // Reset to page 1 if current page is invalid or if filters/sort changed
         if (currentPage > totalPages && totalPages > 0 || currentPage === 0) {
             setCurrentPage(1);
             setPageInput('1');
         }
     }, [processedUsers, currentPage, itemsPerPage]);
 
-    // Handle search (reset page when search changes)
+    // Handle search
     const handleSearch = (newValue?: string) => {
         const value = newValue || '';
         setSearchText(value);
@@ -521,10 +561,10 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         setPageInput('1');
     };
 
-    // Handle alphabet filter (reset page when alphabet filter changes)
+    // Handle alphabet filter
     const handleAlphabetFilter = (letter: string) => {
         if (selectedAlphabet === letter) {
-            setSelectedAlphabet(''); // Clear filter if same letter clicked
+            setSelectedAlphabet('');
         } else {
             setSelectedAlphabet(letter);
         }
@@ -532,33 +572,27 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         setPageInput('1');
     };
 
-    // **Handle column header click for sorting**
+    // Handle column header click for sorting
     const onColumnClick = useCallback((
         event: React.MouseEvent<HTMLElement>,
         column: IColumn
     ): void => {
-        // The column key should be one of the sortable field names
         const columnKey = column.fieldName as keyof IUserData | 'mobilePhone' | 'businessPhones' | 'ipPhone' | '';
         
         let newSortAscending = sortAscending;
         
-        // If the same column is clicked, toggle the sort direction
         if (sortedColumnKey === columnKey) {
             newSortAscending = !sortAscending;
-        } 
-        // If a new column is clicked, sort ascending by default
-        else {
+        } else {
             newSortAscending = true;
         }
 
         setSortedColumnKey(columnKey);
         setSortAscending(newSortAscending);
 
-        // Reset to the first page after sorting
         setCurrentPage(1);
         setPageInput('1');
     }, [sortedColumnKey, sortAscending]);
-
 
     // Calculate pagination
     const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
@@ -605,7 +639,7 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
         return phone;
     };
 
-    // Define table columns with sorting properties
+    // Define table columns - memoized with stable keys
     const columns: IColumn[] = useMemo(() => [
         {
             key: 'photo',
@@ -618,10 +652,11 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                 const userIdentifier = item.mail || item.userPrincipalName;
                 return (
                     <LivePersonaCard
+                        key={item.id}
                         serviceScope={context?.serviceScope}
                         userEmail={userIdentifier}
                         displayName={item.displayName}
-                        graphClient={graphClient ?? undefined}
+                        userId={item.id}
                     />
                 );
             },
@@ -731,7 +766,7 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                 <Text variant="medium">{item.jobTitle || ''}</Text>
             ),
         },
-    ], [sortedColumnKey, sortAscending, context?.serviceScope, graphClient]);
+    ], [sortedColumnKey, sortAscending, context?.serviceScope]);
 
     // Command bar items
     const commandBarItems: ICommandBarItemProps[] = [
@@ -749,7 +784,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
     return (
         <div>
             <Stack tokens={{ childrenGap: 20 }}>
-                {/* Header */}
                 <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
                     <Text variant="xxLarge" styles={{ root: { fontWeight: '600' } }}>
                         People Library
@@ -757,7 +791,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                     <CommandBar items={commandBarItems} />
                 </Stack>
 
-                {/* Controls Row */}
                 <Stack horizontal tokens={{ childrenGap: 20 }} verticalAlign="end">
                     <SearchBox
                         placeholder="Search users by name, email, phone, location, or title..."
@@ -765,10 +798,8 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                         onChange={(_, newValue) => handleSearch(newValue)}
                         styles={{ root: { maxWidth: '400px', flexGrow: 1 } }}
                     />
-                    {/* The global A-Z toggle is removed to prefer column sorting */}
                 </Stack>
 
-                {/* Alphabet Filter */}
                 <Stack>
                     <Text variant="medium" styles={{ root: { marginBottom: '8px', fontWeight: '600' } }}>
                         Filter by Name:
@@ -814,7 +845,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                     </Stack>
                 </Stack>
 
-                {/* Results Summary */}
                 {!loading && (
                     <Text variant="medium" styles={{ root: { color: '#666' } }}>
                         Showing {currentPageUsers.length} of {filteredUsers.length} users
@@ -823,21 +853,18 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                     </Text>
                 )}
 
-                {/* Error Message */}
                 {error && (
                     <MessageBar messageBarType={MessageBarType.error} isMultiline={false}>
                         {error}
                     </MessageBar>
                 )}
 
-                {/* Loading Spinner */}
                 {loading && (
                     <Stack horizontalAlign="center" styles={{ root: { padding: '40px' } }}>
                         <Spinner size={SpinnerSize.large} label="Loading users..." />
                     </Stack>
                 )}
 
-                {/* Users Table */}
                 {!loading && !error && (
                     <>
                         <DetailsList
@@ -845,7 +872,7 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                             columns={columns}
                             layoutMode={DetailsListLayoutMode.justified}
                             selectionMode={SelectionMode.none}
-                            onColumnHeaderClick={onColumnClick} // **Column Sorting Hook**
+                            onColumnHeaderClick={onColumnClick}
                             styles={{
                                 root: {
                                     border: '1px solid #edebe9',
@@ -858,7 +885,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                             onShouldVirtualize={() => false}
                         />
 
-                        {/* Enhanced Pagination */}
                         {totalPages > 1 && (
                             <Stack horizontal horizontalAlign="center" verticalAlign="center" tokens={{ childrenGap: 10 }} styles={{ root: { marginTop: '20px' } }}>
                                 <DefaultButton
@@ -902,7 +928,6 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
                     </>
                 )}
 
-                {/* No Results Message */}
                 {!loading && !error && filteredUsers.length === 0 && users.length > 0 && (
                     <Stack horizontalAlign="center" styles={{ root: { padding: '40px' } }}>
                         <Text variant="mediumPlus">No users found matching your search criteria.</Text>

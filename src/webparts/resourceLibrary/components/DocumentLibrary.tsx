@@ -55,7 +55,8 @@ interface IDocumentLibraryProps {
 }
 
 /** ✅ Power Automate HTTP trigger URL (When an HTTP request is received) */
-const POWER_AUTOMATE_HTTP_URL = 'https://defaulte0ccdb813c814947a03335cadd72e8.38.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/4ff49d38e22d48809f02abaf6fbd2ffb/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=GOQTTg-WUd0UStPZ7UccU6wd98k-zqLX3UYYP2ZdaYY';
+const POWER_AUTOMATE_HTTP_URL =
+  'https://defaulte0ccdb813c814947a03335cadd72e8.38.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/4ff49d38e22d48809f02abaf6fbd2ffb/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=GOQTTg-WUd0UStPZ7UccU6wd98k-zqLX3UYYP2ZdaYY';
 
 /** Default report recipients */
 const DEFAULT_REPORT_RECIPIENTS = [
@@ -92,8 +93,16 @@ const DocumentLibrary: React.FC<IDocumentLibraryProps> = ({ context }) => {
   const [sendingReport, setSendingReport] = useState<boolean>(false);
   const [reportStatus, setReportStatus] = useState<string>('');
 
+  /** ✅ Graph-powered search state */
+  const [graphItems, setGraphItems] = useState<IDocumentItem[]>([]);
+  const [graphSearching, setGraphSearching] = useState<boolean>(false);
+  const [graphError, setGraphError] = useState<string>('');
+
   const itemsPerPage = 20;
   const alphabetLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+  /** ✅ List ID (Resource Library) */
+  const RESOURCE_LIBRARY_LIST_ID = '8177736d-9faa-49cc-82b3-4ff5a93fa02e';
 
   // Get file extension from filename
   const getFileExtension = (fileName: string): string => {
@@ -149,6 +158,7 @@ const DocumentLibrary: React.FC<IDocumentLibraryProps> = ({ context }) => {
       setCopiedId(itemId);
       setTimeout(() => setCopiedId(null), 2000);
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('Failed to copy URL:', err);
     }
   };
@@ -159,7 +169,18 @@ const DocumentLibrary: React.FC<IDocumentLibraryProps> = ({ context }) => {
     window.open(url, '_blank');
   };
 
-  // Fetch items from SharePoint document library
+  /** Convert a full webUrl -> server relative file ref */
+  const webUrlToFileRef = (webUrl?: string): string => {
+    if (!webUrl) return '';
+    try {
+      const u = new URL(webUrl);
+      return u.pathname; // "/sites/.../Shared%20Documents/.."
+    } catch {
+      return webUrl.startsWith('/') ? webUrl : '';
+    }
+  };
+
+  // Fetch items from SharePoint document library (browse / no-search mode)
   const fetchItems = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -168,18 +189,19 @@ const DocumentLibrary: React.FC<IDocumentLibraryProps> = ({ context }) => {
       const sp = spfi('https://vaughnconstruction.sharepoint.com').using(SPFx(context));
 
       const result = await sp.web.lists
-        .getById('8177736d-9faa-49cc-82b3-4ff5a93fa02e')
-        .items
-        .select('Id', 'Title', 'FileLeafRef', 'FSObjType', 'FileRef', 'Training_x0020_Category', 'Modified') // ✅ include Modified
+        .getById(RESOURCE_LIBRARY_LIST_ID)
+        .items.select('Id', 'Title', 'FileLeafRef', 'FSObjType', 'FileRef', 'Training_x0020_Category', 'Modified')
         .top(5000)();
 
-      // Filter out folders (FSObjType = 1 means folder, 0 means file)
+      // Filter out folders
       const documentsOnly = result.filter((item: IDocumentItem) => item.FSObjType === 0);
 
+      // eslint-disable-next-line no-console
       console.log(`Fetched ${documentsOnly.length} documents from library`);
       setItems(documentsOnly);
     } catch (err) {
       setError('Failed to fetch documents from SharePoint');
+      // eslint-disable-next-line no-console
       console.error('Error fetching documents:', err);
     } finally {
       setLoading(false);
@@ -191,7 +213,131 @@ const DocumentLibrary: React.FC<IDocumentLibraryProps> = ({ context }) => {
     fetchItems();
   }, [fetchItems]);
 
-  // Search function
+  /** ✅ Graph Search (accurate search) */
+  const runGraphSearch = useCallback(
+    async (queryText: string) => {
+      const trimmed = (queryText || '').trim();
+      if (!trimmed) {
+        setGraphItems([]);
+        setGraphError('');
+        return;
+      }
+
+      setGraphSearching(true);
+      setGraphError('');
+
+      try {
+        const client = await context.msGraphClientFactory.getClient('3');
+
+        // Restrict to this library by ListId, and only documents (not folders)
+        const kql = `${trimmed} AND (ListId:${RESOURCE_LIBRARY_LIST_ID} OR listid:${RESOURCE_LIBRARY_LIST_ID}) AND (IsDocument:1 OR isdocument:1)`;
+
+        const body = {
+          requests: [
+            {
+              entityTypes: ['driveItem'],
+              query: { queryString: kql },
+              from: 0,
+              size: 200,
+              fields: ['title', 'name', 'webUrl', 'lastModifiedDateTime', 'filetype', 'path'],
+            },
+          ],
+        };
+
+        const graphRes: any = await client.api('/search/query').version('v1.0').post(body);
+
+        const hits: any[] = graphRes?.value?.[0]?.hitsContainers?.[0]?.hits || [];
+
+        // Graph -> prelim
+        const prelim: IDocumentItem[] = hits
+          .map((h) => h?.resource)
+          .filter(Boolean)
+          .map((r: any) => {
+            const name = r?.name || '';
+            const webUrl = r?.webUrl || '';
+            const fileRef = webUrlToFileRef(webUrl);
+
+            const listItemId =
+              Number(r?.sharepointIds?.listItemId) ||
+              Number(r?.sharePointIds?.listItemId) ||
+              0;
+
+            return {
+              Id: listItemId || 0,
+              Title: r?.name || r?.title || '',
+              FileLeafRef: name || r?.title || '',
+              FSObjType: 0,
+              FileRef: fileRef,
+              Modified: r?.lastModifiedDateTime || undefined,
+              Training_x0020_Category: undefined,
+            };
+          })
+          // keep only items that look like files
+          .filter((x) => !!x.FileLeafRef && x.FileLeafRef.includes('.'));
+
+        // Enrich from SP list so we get Training Category + correct Title/FileRef etc.
+        const ids = prelim.map((p) => p.Id).filter((id) => !!id);
+
+        if (ids.length) {
+          const sp = spfi('https://vaughnconstruction.sharepoint.com').using(SPFx(context));
+
+          // "Id eq 1 or Id eq 2 or ..."
+          const filter = ids.slice(0, 200).map((id) => `Id eq ${id}`).join(' or ');
+
+          const details: any[] = await sp.web.lists
+            .getById(RESOURCE_LIBRARY_LIST_ID)
+            .items.select('Id', 'Title', 'FileLeafRef', 'FSObjType', 'FileRef', 'Training_x0020_Category', 'Modified')
+            .filter(filter)();
+
+          const byId = new Map<number, any>(details.map((d) => [d.Id, d]));
+
+          const merged: IDocumentItem[] = prelim.map((p) => {
+            const d = byId.get(p.Id);
+            if (!d) return p;
+
+            return {
+              Id: d.Id,
+              Title: d.Title || p.Title || d.FileLeafRef,
+              FileLeafRef: d.FileLeafRef || p.FileLeafRef,
+              FSObjType: d.FSObjType ?? 0,
+              FileRef: d.FileRef || p.FileRef,
+              Training_x0020_Category: d.Training_x0020_Category,
+              Modified: d.Modified || p.Modified,
+            };
+          });
+
+          setGraphItems(merged.filter((x) => x.FSObjType === 0));
+        } else {
+          // If Graph didn't provide listItemId, show basic results
+          setGraphItems(prelim);
+        }
+      } catch (e: any) {
+        // eslint-disable-next-line no-console
+        console.error('Graph search failed', e);
+        setGraphError(e?.message || String(e));
+        setGraphItems([]);
+      } finally {
+        setGraphSearching(false);
+      }
+    },
+    [context, RESOURCE_LIBRARY_LIST_ID]
+  );
+
+  /** ✅ debounce Graph search while typing */
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (searchText.trim()) {
+        runGraphSearch(searchText);
+      } else {
+        setGraphItems([]);
+        setGraphError('');
+      }
+    }, 450);
+
+    return () => clearTimeout(t);
+  }, [searchText, runGraphSearch]);
+
+  // Search function (still used for browse mode; Graph already did server-side search)
   const searchInData = (item: IDocumentItem, searchTerm: string): boolean => {
     if (!searchTerm.trim()) return true;
 
@@ -251,12 +397,11 @@ const DocumentLibrary: React.FC<IDocumentLibraryProps> = ({ context }) => {
 
   /** ✅ Date range match (inclusive) */
   const isWithinModifiedRange = (item: IDocumentItem) => {
-    if (!startDate || !endDate) return true; // no filter applied unless both selected
+    if (!startDate || !endDate) return true;
     if (!item.Modified) return false;
 
     const mod = new Date(item.Modified);
 
-    // inclusive range - normalize to start-of-day / end-of-day
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
 
@@ -268,7 +413,10 @@ const DocumentLibrary: React.FC<IDocumentLibraryProps> = ({ context }) => {
 
   // Memoized filtered items
   const processedItems = useMemo(() => {
-    let result = [...items];
+    // ✅ Use Graph results ONLY when user is searching
+    const sourceItems = searchText.trim() ? graphItems : items;
+
+    let result = [...sourceItems];
 
     // Determine active sort column
     const activeCol = sortState.key ? columnsState.find((c) => c.key === sortState.key) : null;
@@ -295,8 +443,8 @@ const DocumentLibrary: React.FC<IDocumentLibraryProps> = ({ context }) => {
       });
     }
 
-    // Apply search filter
-    if (searchText.trim()) {
+    // Apply search filter only in browse mode (Graph already did the searching)
+    if (searchText.trim() && !searchText.trim()) {
       result = result.filter((item) => searchInData(item, searchText));
     }
 
@@ -306,13 +454,13 @@ const DocumentLibrary: React.FC<IDocumentLibraryProps> = ({ context }) => {
     }
 
     return result;
-  }, [items, searchText, selectedAlphabet, sortState, columnsState, startDate, endDate]);
+  }, [items, graphItems, searchText, selectedAlphabet, sortState, columnsState, startDate, endDate]);
 
   // Update filtered items
   useEffect(() => {
     setFilteredItems(processedItems);
-    const totalPages = Math.ceil(processedItems.length / itemsPerPage);
-    if (currentPage > totalPages && totalPages > 0) {
+    const totalPagesLocal = Math.ceil(processedItems.length / itemsPerPage);
+    if (currentPage > totalPagesLocal && totalPagesLocal > 0) {
       setCurrentPage(1);
       setPageInput('1');
     }
@@ -361,10 +509,7 @@ const DocumentLibrary: React.FC<IDocumentLibraryProps> = ({ context }) => {
       minWidth: 40,
       maxWidth: 40,
       onRender: (item: IDocumentItem) => (
-        <Icon
-          iconName={getFileIcon(item.FileLeafRef)}
-          styles={{ root: { fontSize: '20px', color: '#0078d4' } }}
-        />
+        <Icon iconName={getFileIcon(item.FileLeafRef)} styles={{ root: { fontSize: '20px', color: '#0078d4' } }} />
       ),
     },
     {
@@ -522,31 +667,26 @@ const DocumentLibrary: React.FC<IDocumentLibraryProps> = ({ context }) => {
   ];
 
   /** Build HTML table for the report (Title clickable link) */
-const buildReportHtmlTable = (reportItems: IDocumentItem[]) => {
+  const buildReportHtmlTable = (reportItems: IDocumentItem[]) => {
+    const formatDate = (d?: string | Date) => {
+      if (!d) return '';
+      const date = new Date(d);
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      const yyyy = date.getFullYear();
+      return `${mm}/${dd}/${yyyy}`;
+    };
 
-  const formatDate = (d?: string | Date) => {
-    if (!d) return '';
-    const date = new Date(d);
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const yyyy = date.getFullYear();
-    return `${mm}/${dd}/${yyyy}`;
-  };
+    const rows = reportItems
+      .map((it) => {
+        const title = (it.Title || it.FileLeafRef || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const rows = reportItems
-    .map((it) => {
-      const title = (it.Title || it.FileLeafRef || '')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+        const url = buildOpenUrl(it.FileRef, it.FileLeafRef);
+        const modified = it.Modified ? formatDate(it.Modified) : '';
+        const category = (it.Training_x0020_Category || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const docType = getFileExtension(it.FileLeafRef);
 
-      const url = buildOpenUrl(it.FileRef, it.FileLeafRef);
-      const modified = it.Modified ? formatDate(it.Modified) : '';
-      const category = (it.Training_x0020_Category || '')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      const docType = getFileExtension(it.FileLeafRef);
-
-      return `
+        return `
         <tr>
           <td style="padding:8px;border:1px solid #ddd;">
             <a href="${url}" target="_blank" rel="noreferrer">${title}</a>
@@ -556,10 +696,10 @@ const buildReportHtmlTable = (reportItems: IDocumentItem[]) => {
           <td style="padding:8px;border:1px solid #ddd;">${modified || '-'}</td>
         </tr>
       `;
-    })
-    .join('');
+      })
+      .join('');
 
-  return `
+    return `
     <div style="font-family:Segoe UI, Arial, sans-serif;">
       <h3 style="margin:0 0 8px 0;">Resource Library – Modified Documents Report</h3>
       <div style="margin:0 0 12px 0;color:#444;">
@@ -582,9 +722,10 @@ const buildReportHtmlTable = (reportItems: IDocumentItem[]) => {
       </table>
     </div>
   `;
-};
+  };
 
-const peoplePickerKey = `reportPicker_${startDate?.toDateString() || "na"}_${endDate?.toDateString() || "na"}_${isSharePanelOpen}`;
+  const peoplePickerKey = `reportPicker_${startDate?.toDateString() || 'na'}_${endDate?.toDateString() || 'na'}_${isSharePanelOpen}`;
+
   /** Call Power Automate HTTP trigger */
   const sendReport = async () => {
     if (!startDate || !endDate) return;
@@ -598,15 +739,11 @@ const peoplePickerKey = `reportPicker_${startDate?.toDateString() || "na"}_${end
       setSendingReport(true);
       setReportStatus('');
 
-      // report items = currently filtered list (already respects search + alpha + date range)
-      const reportItems = [...filteredItems];
-
-  const payload = {
-  recipients: reportRecipients,
-  subject: `Resource Library: Modified documents (${startDate!.toLocaleDateString()} – ${endDate!.toLocaleDateString()})`,
-  reportHtml: buildReportHtmlTable([...filteredItems]),
-};
-
+      const payload = {
+        recipients: reportRecipients,
+        subject: `Resource Library: Modified documents (${startDate.toLocaleDateString()} – ${endDate.toLocaleDateString()})`,
+        reportHtml: buildReportHtmlTable([...filteredItems]),
+      };
 
       const res = await fetch(POWER_AUTOMATE_HTTP_URL, {
         method: 'POST',
@@ -622,6 +759,7 @@ const peoplePickerKey = `reportPicker_${startDate?.toDateString() || "na"}_${end
       setReportStatus(`✅ Report sent to: ${reportRecipients.join(', ')}`);
       setIsSharePanelOpen(false);
     } catch (e: any) {
+      // eslint-disable-next-line no-console
       console.error(e);
       setReportStatus(`❌ Failed to send report. ${e?.message || e}`);
     } finally {
@@ -657,6 +795,18 @@ const peoplePickerKey = `reportPicker_${startDate?.toDateString() || "na"}_${end
             styles={{ root: { maxWidth: '500px' } }}
           />
         </Stack>
+
+        {/* Graph search feedback */}
+        {graphSearching && (
+          <Stack horizontalAlign="center" styles={{ root: { padding: '10px 0' } }}>
+            <Spinner size={SpinnerSize.small} label="Searching (Graph)..." />
+          </Stack>
+        )}
+        {!graphSearching && graphError && (
+          <MessageBar messageBarType={MessageBarType.error} isMultiline={false}>
+            Graph search failed: {graphError}
+          </MessageBar>
+        )}
 
         {/* ✅ Advanced Filter: Modified date range */}
         <Stack
@@ -871,7 +1021,8 @@ const peoplePickerKey = `reportPicker_${startDate?.toDateString() || "na"}_${end
           <Stack tokens={{ childrenGap: 14 }}>
             <Text>
               This will send a report for documents <b>Modified</b> between{' '}
-              <b>{startDate ? startDate.toLocaleDateString() : '-'}</b> and <b>{endDate ? endDate.toLocaleDateString() : '-'}</b>.
+              <b>{startDate ? startDate.toLocaleDateString() : '-'}</b> and{' '}
+              <b>{endDate ? endDate.toLocaleDateString() : '-'}</b>.
             </Text>
 
             <Text variant="medium" styles={{ root: { fontWeight: 600 } }}>
@@ -879,24 +1030,23 @@ const peoplePickerKey = `reportPicker_${startDate?.toDateString() || "na"}_${end
             </Text>
 
             <PeoplePicker
-  context={context as any}
-  personSelectionLimit={10}
-  principalTypes={[PrincipalType.User]}
-  ensureUser={true}
-  showHiddenInUI={false}
-  resolveDelay={300}
-  defaultSelectedUsers={reportRecipients?.length ? reportRecipients : DEFAULT_REPORT_RECIPIENTS}
-  onChange={(items: IPeoplePickerUserItem[]) => {
-    const mails = (items || [])
-      .map((p) => (p.secondaryText || "").trim())
-      .filter(Boolean);
+              context={context as any}
+              personSelectionLimit={10}
+              principalTypes={[PrincipalType.User]}
+              ensureUser={true}
+              showHiddenInUI={false}
+              resolveDelay={300}
+              defaultSelectedUsers={reportRecipients?.length ? reportRecipients : DEFAULT_REPORT_RECIPIENTS}
+              onChange={(items: IPeoplePickerUserItem[]) => {
+                const mails = (items || [])
+                  .map((p) => (p.secondaryText || '').trim())
+                  .filter(Boolean);
 
-    setReportRecipients(mails);
-  }}
-  webAbsoluteUrl={context.pageContext.web.absoluteUrl}
-  key={peoplePickerKey}
-/>
-
+                setReportRecipients(mails);
+              }}
+              webAbsoluteUrl={context.pageContext.web.absoluteUrl}
+              key={peoplePickerKey}
+            />
 
             {reportStatus && (
               <MessageBar messageBarType={reportStatus.startsWith('✅') ? MessageBarType.success : MessageBarType.error}>

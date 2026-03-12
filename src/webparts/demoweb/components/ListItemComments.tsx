@@ -355,6 +355,6 @@ export default function ListItemComments(props: IListItemCommentsProps): React.R
   };
 
   return (
-   <Newtable/>
+   <Newtable Context={context} />
   );
 }
