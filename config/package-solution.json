@@ -3,7 +3,7 @@
   "solution": {
     "name": "vaughnconstruction-client-side-solution",
     "id": "54e514dc-bbf4-4a3b-8381-6f9ef6086431",
-    "version": "1.0.1.6",
+    "version": "1.0.1.7",
     "includeClientSideAssets": true,
     "skipFeatureDeployment": true,
     "isDomainIsolated": false,
@@ -40,7 +40,7 @@
         "title": "vaughnconstruction Feature",
         "description": "The feature that activates elements of the vaughnconstruction solution.",
         "id": "4b107b60-ef25-4a47-bc2e-aa3ec197f417",
-        "version": "1.0.1.6"
+        "version": "1.0.1.7"
       }
     ]
   },

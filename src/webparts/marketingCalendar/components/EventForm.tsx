@@ -649,96 +649,141 @@ const EventForm: React.FC<any> = (props) => {
   };
 
   // ─── Save ─────────────────────────────────────────────────────────────────────
-  const handleSave = async () => {
-    if (props.isNew && !props?.userPermissions?.canAdd) return;
-    if (!props.isNew && !props?.canEditEvent) return;
-    if (formData.endTime < formData.startTime) {
-      setTimeError('End time must be after start time.');
-      return;
+ const handleSave = async () => {
+  if (props.isNew && !props?.userPermissions?.canAdd) return;
+  if (!props.isNew && !props?.canEditEvent) return;
+
+  if (formData.endTime < formData.startTime) {
+    setTimeError('End time must be after start time.');
+    return;
+  }
+
+  setSaveError(null);
+
+  try {
+    const eventToSave = { ...formData } as any;
+
+    if (returnedRecurrenceInfo) {
+      eventToSave.RecurrenceData = returnedRecurrenceInfo.recurrenceData;
+    } else if (recurrenceData) {
+      eventToSave.RecurrenceData = recurrenceData;
     }
 
-    setSaveError(null);
+    const listItem: any = {
+      Title: eventToSave.title,
+      Location: eventToSave.locations,
+      Description: eventToSave.description,
+      Category: eventToSave.category,
+      fAllDayEvent: isAllDay,
+    };
 
-    try {
-      const eventToSave = { ...formData } as any;
+    if (isAllDay) {
+      const dateOnly = moment(eventToSave.startTime).format('YYYY-MM-DD');
+      listItem.EventDate = `${dateOnly}T00:00:00`;
+      listItem.EndDate = `${dateOnly}T23:59:59`;
+      listItem.fAllDayEvent = true;
+    } else {
+      listItem.EventDate = moment(eventToSave.startTime).format('YYYY-MM-DDTHH:mm:ss') + 'Z';
+      listItem.EndDate = moment(eventToSave.endTime).format('YYYY-MM-DDTHH:mm:ss') + 'Z';
+    }
 
-      if (returnedRecurrenceInfo) {
-        eventToSave.RecurrenceData = returnedRecurrenceInfo.recurrenceData;
-      } else if (recurrenceData) {
-        eventToSave.RecurrenceData = recurrenceData;
-      }
+    if (eventToSave.RecurrenceData) {
+      listItem.RecurrenceData = eventToSave.RecurrenceData;
+    }
 
-      const listItem: any = {
-        Title: eventToSave.title,
-        Location: eventToSave.locations,
-        Description: eventToSave.description,
-        Category: eventToSave.category,
-        fAllDayEvent: isAllDay,
-      };
+    let savedItemId: number;
 
-      if (isAllDay) {
-        const dateOnly = moment(eventToSave.startTime).format('YYYY-MM-DD');
-        listItem.EventDate = `${dateOnly}T00:00:00`;
-        listItem.EndDate = `${dateOnly}T23:59:59`;
-        listItem.fAllDayEvent = true;
-      } else {
-        listItem.EventDate = moment(eventToSave.startTime).format('YYYY-MM-DDTHH:mm:ss') + 'Z';
-        listItem.EndDate = moment(eventToSave.endTime).format('YYYY-MM-DDTHH:mm:ss') + 'Z';
-      }
+    // ─────────────────────────────────────────
+    // CREATE OR UPDATE EVENT
+    // ─────────────────────────────────────────
+    if (props.isNew) {
 
-      if (eventToSave.RecurrenceData) listItem.RecurrenceData = eventToSave.RecurrenceData;
+      const response = await sp.web.lists
+        .getById(props.MarketingCalendarId)
+        .items.add(listItem);
 
-      let savedItemId: number;
-      if (props.isNew) {
-        const response = await sp.web.lists
-          .getById(props.MarketingCalendarId)
-          .items.add(listItem);
-        savedItemId = response.data.Id;
-        console.log('Item added successfully:', response);
-      } else {
-        savedItemId = parseInt(String(eventToSave.id));
-        await sp.web.lists
-          .getById(props.MarketingCalendarId)
-          .items.getById(savedItemId)
-          .update(listItem);
-        console.log('Item updated successfully');
-      }
+      savedItemId = response?.Id;
+      console.log('Item added successfully:', savedItemId);
 
-      const itemAttachments = sp.web.lists
+      // 🔴 IMPORTANT: wait for SharePoint commit
+      await new Promise(resolve => setTimeout(resolve, 1200));
+
+    } else {
+
+      savedItemId = parseInt(String(eventToSave.id));
+
+      await sp.web.lists
         .getById(props.MarketingCalendarId)
         .items.getById(savedItemId)
-        .attachmentFiles;
+        .update(listItem);
 
-      for (const fileName of attachmentsToDelete) {
-        try {
-          await itemAttachments.getByName(fileName).delete();
-        } catch (e) {
-          console.warn(`Could not delete attachment "${fileName}":`, e);
-        }
-      }
+      console.log('Item updated successfully');
 
-      if (pendingLocalFile) {
-        const buffer = await pendingLocalFile.arrayBuffer();
-        await itemAttachments.add(pendingLocalFile.name, buffer);
-        setPendingLocalFile(null);
-      }
-
-      if (pendingLibraryBlob) {
-        const buffer = await pendingLibraryBlob.blob.arrayBuffer();
-        await itemAttachments.add(pendingLibraryBlob.name, buffer);
-        setPendingLibraryBlob(null);
-      }
-
-      const updatedAttachments: IAttachmentInfo[] = await itemAttachments();
-      setExistingAttachments(updatedAttachments);
-      setAttachmentsToDelete([]);
-
-      props.onSave({ ...eventToSave, id: savedItemId, attachments: updatedAttachments });
-    } catch (error) {
-      console.error('Error saving event:', error);
-      setSaveError(parseError(error));
     }
-  };
+
+    // ─────────────────────────────────────────
+    // ATTACHMENTS
+    // ─────────────────────────────────────────
+    const itemAttachments = sp.web.lists
+      .getById(props.MarketingCalendarId)
+      .items
+      .getById(savedItemId)
+      .attachmentFiles;
+
+    // Delete attachments
+    for (const fileName of attachmentsToDelete) {
+      try {
+        await itemAttachments.getByName(fileName).delete();
+      } catch (e) {
+        console.warn(`Could not delete attachment "${fileName}":`, e);
+      }
+    }
+
+    // Upload local file
+    if (pendingLocalFile) {
+
+      const buffer = await pendingLocalFile.arrayBuffer();
+
+      await itemAttachments.add(
+        pendingLocalFile.name,
+        buffer
+      );
+
+      setPendingLocalFile(null);
+    }
+
+    // Upload library selected file
+    if (pendingLibraryBlob) {
+
+      const buffer = await pendingLibraryBlob.blob.arrayBuffer();
+
+      await itemAttachments.add(
+        pendingLibraryBlob.name,
+        buffer
+      );
+
+      setPendingLibraryBlob(null);
+    }
+
+    // Reload attachments
+    const updatedAttachments: IAttachmentInfo[] = await itemAttachments();
+
+    setExistingAttachments(updatedAttachments);
+    setAttachmentsToDelete([]);
+
+    props.onSave({
+      ...eventToSave,
+      id: savedItemId,
+      attachments: updatedAttachments
+    });
+
+  } catch (error) {
+
+    console.error('Error saving event:', error);
+
+    setSaveError(parseError(error));
+  }
+};
 
   const handleDelete = (): void => {
     if (formData.id && !props.isNew) props.onDelete(formData.id);
