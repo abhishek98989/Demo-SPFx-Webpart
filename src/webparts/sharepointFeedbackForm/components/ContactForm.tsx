@@ -3,12 +3,15 @@ import { useState } from 'react';
 import styles from './SharepointFeedbackForm.module.scss';
 import { spfi, SPFx } from '@pnp/sp/presets/all';
 import { DefaultButton, PrimaryButton } from '@fluentui/react';
+
 interface IContactFormProps {
-    context?: any; // SPFx context
+    context?: any;
 }
 
+type FormCategory = 'SharepointCommittee' | 'TechSupport' | null;
+
 interface IContactFormState {
-    showForm: boolean;
+    activeForm: FormCategory;
     message: string;
     userEmail: string;
     userName: string;
@@ -20,7 +23,7 @@ interface IContactFormState {
 const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
     const sp = spfi('https://vaughnconstruction.sharepoint.com').using(SPFx(context));
     const [state, setState] = useState<IContactFormState>({
-        showForm: false,
+        activeForm: null,
         message: '',
         userEmail: '',
         userName: '',
@@ -29,7 +32,6 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
         submitError: ''
     });
 
-    // Initialize user information when component mounts
     React.useEffect(() => {
         if (context) {
             setState(prevState => ({
@@ -40,10 +42,12 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
         }
     }, [context]);
 
-    const handleContactClick = (): void => {
+    const handleButtonClick = (category: FormCategory): void => {
         setState(prevState => ({
             ...prevState,
-            showForm: !prevState.showForm,
+            // Toggle off if same button clicked again
+            activeForm: prevState.activeForm === category ? null : category,
+            message: '',
             submitSuccess: false,
             submitError: ''
         }));
@@ -63,7 +67,8 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
 
             const listItem = {
                 Title: `Feedback (${currentDate} - by ${state.userName})`,
-                Feedback: state.message
+                Feedback: state.message,
+                Category: state.activeForm   // 'SharepointCommittee' or 'TechSupport'
             };
 
             await sp.web.lists.getById(listGuid).items.add(listItem);
@@ -73,7 +78,7 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
                 isSubmitting: false,
                 submitSuccess: true,
                 message: '',
-                showForm: false
+                activeForm: null
             }));
 
         } catch (error) {
@@ -109,31 +114,55 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
     const handleCancel = (): void => {
         setState(prevState => ({
             ...prevState,
-            showForm: false,
+            activeForm: null,
             message: '',
             submitError: ''
         }));
     };
 
+    const formTitle = state.activeForm === 'TechSupport'
+        ? 'Contact IT Tech Support'
+        : 'Contact Vaughn SharePoint Support';
+
+    const formPlaceholder = state.activeForm === 'TechSupport'
+        ? 'Describe your IT issue here...'
+        : 'Type your message here...';
+
     return (
         <div className={styles.contactForm}>
+
+            {/* Row 1 — SharePoint issues */}
             <div className={styles.messageContainer}>
                 <p className={styles.mainMessage}>
-                    If you are facing any issue or problem related to the Vaughn SharePoint or Intranet, &nbsp;
+                    If you have questions or problems <strong>with SharePoint</strong>,&nbsp;
                     <PrimaryButton
                         text="Contact us"
-                        onClick={handleContactClick}
+                        onClick={() => handleButtonClick('SharepointCommittee')}
                         type="button"
                         styles={{ root: { minWidth: '40px' } }}
                     />
                 </p>
             </div>
 
-            {state.showForm && (
+            {/* Row 2 — General IT issues */}
+            <div className={styles.messageContainer}>
+                <p className={styles.mainMessage}>
+                    If you have any other IT issues,&nbsp;
+                    <PrimaryButton
+                        text="Email Tech Support"
+                        onClick={() => handleButtonClick('TechSupport')}
+                        type="button"
+                        styles={{ root: { minWidth: '40px' } }}
+                    />
+                </p>
+            </div>
+
+            {/* Shared form — shown for either button, title/placeholder adapt to category */}
+            {state.activeForm && (
                 <div className={styles.formContainer}>
                     <form onSubmit={handleSubmit} className={styles.contactFormElement}>
                         <div className={styles.formHeader}>
-                            <h3>Contact Vaughn SharePoint Support</h3>
+                            <h3>{formTitle}</h3>
                         </div>
 
                         <div className={styles.formGroup}>
@@ -145,7 +174,7 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
                                 className={styles.textarea}
                                 value={state.message}
                                 onChange={handleMessageChange}
-                                placeholder="Type your message here..."
+                                placeholder={formPlaceholder}
                                 rows={6}
                                 required
                             />
@@ -167,7 +196,7 @@ const ContactForm: React.FC<IContactFormProps> = ({ context }) => {
                                 text="Cancel"
                                 disabled={state.isSubmitting}
                                 onClick={handleCancel}
-                                  type="button"
+                                type="button"
                             />
                         </div>
                     </form>

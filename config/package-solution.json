@@ -3,18 +3,22 @@
   "solution": {
     "name": "vaughnconstruction-client-side-solution",
     "id": "54e514dc-bbf4-4a3b-8381-6f9ef6086431",
-    "version": "1.0.1.7",
+    "version": "1.0.1.10",
     "includeClientSideAssets": true,
     "skipFeatureDeployment": true,
     "isDomainIsolated": false,
     "webApiPermissionRequests": [
       {
         "resource": "Microsoft Graph",
-        "scope": "User.Read.All"
+        "scope": "Chat.Create"
       },
       {
         "resource": "Microsoft Graph",
-        "scope": "User.ReadBasic.All"
+        "scope": "Chat.ReadWrite"
+      },
+      {
+        "resource": "Microsoft Graph",
+        "scope": "User.Read.All"
       }
     ],
     "developer": {
@@ -40,7 +44,7 @@
         "title": "vaughnconstruction Feature",
         "description": "The feature that activates elements of the vaughnconstruction solution.",
         "id": "4b107b60-ef25-4a47-bc2e-aa3ec197f417",
-        "version": "1.0.1.7"
+        "version": "1.0.1.10"
       }
     ]
   },

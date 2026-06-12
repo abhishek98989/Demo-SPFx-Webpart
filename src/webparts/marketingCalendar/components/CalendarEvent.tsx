@@ -103,6 +103,7 @@ export default function ModernCalendar(props: any) {
 ? [
     { key: 'Safety', text: 'Safety' },
     { key: 'Ops', text: 'Ops' },
+    { key: 'Estimating', text: 'Estimating' },
     { key: 'Other', text: 'Other' },
     { key: 'Vaughn Outdoors', text: 'Vaughn Outdoors' },
     { key: 'VaughnLife', text: 'VaughnLife' },
@@ -154,6 +155,7 @@ export default function ModernCalendar(props: any) {
 const categoryOptionsColorTraining: Record<string, string> = {
   'Safety': '#ff0000',          // red
   'Ops': '#3174ad',             // blue
+  'Estimating': '#800080',      // purple
   'Other': '#ffff00',           // yellow
   'Vaughn Outdoors': '#8b4513', // brown
   'VaughnLife': '#107c10',      // green
@@ -165,6 +167,7 @@ const categoryOptionsColorTraining: Record<string, string> = {
   'Safety': '#ffffff',
   'Ops': '#ffffff',
   'Other': '#000000',
+   'Estimating': '#ffffff',
   'Vaughn Outdoors': '#ffffff',
   'VaughnLife': '#ffffff',
   'HR': '#ffffff',

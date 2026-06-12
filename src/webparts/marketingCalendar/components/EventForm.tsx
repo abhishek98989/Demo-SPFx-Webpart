@@ -477,6 +477,7 @@ const EventForm: React.FC<any> = (props) => {
     } else if (props?.CalendarTitle === 'Company Calendar') {
       setCategoryOptions([
         { key: 'Safety', text: 'Safety' },
+        { key: 'Estimating', text: 'Estimating' },
         { key: 'Ops', text: 'Ops' },
         { key: 'Other', text: 'Other' },
         { key: 'Vaughn Outdoors', text: 'Vaughn Outdoors' },
@@ -944,6 +945,7 @@ const resolvedCategoryFg = isTrainingCalendar
   // ─── Edit Panel ───────────────────────────────────────────────────────────────
   return (
     <>
+    {/*  */}
       <Panel
         isBlocking={false}
         isOpen={true}

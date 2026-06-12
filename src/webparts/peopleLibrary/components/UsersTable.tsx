@@ -44,6 +44,7 @@ interface IUserData {
     userType?: string;
     accountEnabled?: boolean;
     photo?: string;
+    onPremisesDistinguishedName?: string;
 }
 
 // Props interface for the component
@@ -327,16 +328,46 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
     ): Promise<IUserData[]> => {
         try {
             let request;
-            if (nextLink) {
-                request = graphClient.api(nextLink.replace('https://graph.microsoft.com/v1.0', ''));
-            } else {
-                request = graphClient
-                    .api('/users')
-                    .select(
-                        'id,displayName,mail,mobilePhone,ipPhone,businessPhones,officeLocation,jobTitle,userPrincipalName,userType,accountEnabled,companyName'
-                    )
-                    .top(999);
-            }
+           if (nextLink) {
+    request = graphClient.api(nextLink.replace('https://graph.microsoft.com/v1.0', ''));
+} else {
+    request = graphClient
+        .api('/users')
+        .select([
+            'id',
+            'displayName',
+            'givenName',
+            'surname',
+            'userPrincipalName',
+            'mail',
+            'otherMails',
+            'proxyAddresses',
+            'mobilePhone',
+            'businessPhones',
+            'jobTitle',
+            'companyName',
+            'department',
+            'employeeId',
+            'officeLocation',
+            'preferredLanguage',
+            'accountEnabled',
+            'usageLocation',
+            'createdDateTime',
+            'lastPasswordChangeDateTime',
+            'signInSessionsValidFromDateTime',
+            'passwordPolicies',
+            'onPremisesSyncEnabled',
+            'onPremisesLastSyncDateTime',
+            'onPremisesDistinguishedName',
+            'onPremisesSamAccountName',
+            'onPremisesUserPrincipalName',
+            'onPremisesDomainName',
+            'onPremisesImmutableId',
+            'onPremisesSecurityIdentifier',
+            'onPremisesExtensionAttributes'
+        ])
+        .top(999);
+}
 
             const response = await request.get();
             const newUsers = response.value || [];
@@ -453,7 +484,12 @@ const UsersTable: React.FC<IUsersTableProps> = ({ context }) => {
  if (user.mail?.toLowerCase() === 'kcotie@vaughnconstruction.com') {
         return false;
     }
-
+if (
+    user.onPremisesDistinguishedName &&
+    user.onPremisesDistinguishedName.toLowerCase().includes('ou=~disabled')
+) {
+    return false;
+}
                 if (user.accountEnabled === false) {
                     return false;
                 }

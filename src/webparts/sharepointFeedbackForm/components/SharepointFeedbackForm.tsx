@@ -16,7 +16,7 @@ export default class SharepointFeedbackForm extends React.Component<ISharepointF
 
     return (
       // <Scripting context={this.props.context} />
-      <ContactForm context={this.props.context} />
+        <ContactForm context={this.props.context} />
     );
   }
 }
