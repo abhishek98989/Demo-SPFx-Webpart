@@ -16,6 +16,7 @@ import {
   Spinner,
   SpinnerSize,
 } from '@fluentui/react';
+import { Persona, PersonaSize } from '@fluentui/react/lib/Persona';
 import { TextField } from '@fluentui/react/lib/TextField';
 import { DatePicker } from '@fluentui/react/lib/DatePicker';
 import { TimePicker } from '@fluentui/react/lib/TimePicker';
@@ -33,6 +34,8 @@ import '@pnp/sp/folders';
 import '@pnp/sp/files';
 import { parseRecurrenceToString } from '../../../globalCommon/reccurenceStringToText';
 import moment from 'moment';
+import { processEmailMailtoLinks } from './emailUtils';
+import { LivePersona } from '@pnp/spfx-controls-react/lib/LivePersona';
 
 // ─── Hardcoded SP paths ────────────────────────────────────────────────────────
 const PDF_SP_ROOT = 'https://vaughnconstruction.sharepoint.com';
@@ -70,17 +73,77 @@ function buildBreadcrumb(
   });
 }
 
+// ─── Persona Card Helper (References UsersTable LivePersona pattern) ────────────
+const VaughnPersonaCard: React.FC<{
+  email: string;
+  serviceScope?: any;
+}> = ({ email, serviceScope }) => {
+  const namePart = email.split('@')[0];
+  const formattedName = namePart
+    .split('.')
+    .map(p => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(' ');
+
+  const personaElement = (
+    <Persona
+      text={formattedName}
+      secondaryText={email}
+      size={PersonaSize.size32}
+      styles={{
+        root: {
+          padding: '4px 8px',
+          borderRadius: 6,
+          background: '#faf9f8',
+          border: '1px solid #edebe9',
+          cursor: 'pointer',
+          selectors: {
+            ':hover': {
+              background: '#f3f2f1',
+            },
+          },
+        },
+      }}
+    />
+  );
+
+  if (serviceScope) {
+    return (
+      <LivePersona
+        serviceScope={serviceScope}
+        upn={email}
+        template={personaElement}
+      />
+    );
+  }
+
+  return (
+    <a href={`mailto:${email}`} style={{ textDecoration: 'none' }}>
+      {personaElement}
+    </a>
+  );
+};
+
 // ─── View-Only Dialog ─────────────────────────────────────────────────────────
-// AFTER
 const EventViewDialog: React.FC<{
   event: any;
   attachments: IAttachmentInfo[];
   onClose: () => void;
   categoryBg?: string;
   categoryFg?: string;
-}> = ({ event, attachments, onClose, categoryBg = '#fff4ce', categoryFg = '#7a5c00' }) => {
+  serviceScope?: any;
+}> = ({ event, attachments, onClose, categoryBg = '#fff4ce', categoryFg = '#7a5c00', serviceScope }) => {
   const formatDate = (d: Date) => moment(d).format('MMMM D, YYYY h:mm A');
   const pdfAttachments = attachments.filter(a => a.FileName.toLowerCase().endsWith('.pdf'));
+
+  const extractVaughnEmails = (text: string): string[] => {
+    if (!text || typeof text !== 'string') return [];
+    const regex = /[a-zA-Z0-9._%+-]+@vaughnconstruction\.com/gi;
+    const matches = text.match(regex);
+    if (!matches) return [];
+    return Array.from(new Set(matches.map(e => e.toLowerCase())));
+  };
+
+  const vaughnEmails = extractVaughnEmails(event.description || event.Description || '');
 
   return (
     <Dialog
@@ -197,7 +260,7 @@ const EventViewDialog: React.FC<{
               </Text>
             </Stack>
           )}
-        
+
           {event.category && (
             <Stack
               horizontal
@@ -221,12 +284,35 @@ const EventViewDialog: React.FC<{
         </Stack>
       )}
 
+      {/* ── Vaughn Email Personas ── */}
+      {vaughnEmails.length > 0 && (
+        <Stack tokens={{ childrenGap: 6 }} styles={{ root: { marginBottom: 16 } }}>
+          <Text
+            variant="tiny"
+            styles={{
+              root: { color: '#8a8886', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 },
+            }}
+          >
+            Contact / Host
+          </Text>
+          <Stack horizontal tokens={{ childrenGap: 12 }} styles={{ root: { flexWrap: 'wrap' } }}>
+            {vaughnEmails.map((email) => (
+              <VaughnPersonaCard
+                key={email}
+                email={email}
+                serviceScope={serviceScope}
+              />
+            ))}
+          </Stack>
+        </Stack>
+      )}
+
       {/* ── Description ── */}
       {event.description && (
         <Stack tokens={{ childrenGap: 6 }} styles={{ root: { marginBottom: 16 } }}>
           <Text
             variant="tiny"
-             styles={{
+            styles={{
               root: { color: '#8a8886', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 },
             }}
           >
@@ -254,7 +340,7 @@ const EventViewDialog: React.FC<{
         <Stack tokens={{ childrenGap: 6 }} styles={{ root: { marginBottom: 16 } }}>
           <Text
             variant="tiny"
-              styles={{
+            styles={{
               root: { color: '#8a8886', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 },
             }}
           >
@@ -281,7 +367,7 @@ const EventViewDialog: React.FC<{
         </Stack>
       )}
 
-      {/* ── PDF Attachments — inline iframe preview (matches extension style) ── */}
+      {/* ── PDF Attachments ── */}
       {pdfAttachments.length > 0 && (
         <Stack tokens={{ childrenGap: 12 }} styles={{ root: { marginBottom: 8 } }}>
           <Text
@@ -305,7 +391,6 @@ const EventViewDialog: React.FC<{
                 },
               }}
             >
-              {/* Title bar — mirrors extension popup chrome */}
               <Stack
                 horizontal
                 verticalAlign="center"
@@ -346,7 +431,6 @@ const EventViewDialog: React.FC<{
                 />
               </Stack>
 
-              {/* Inline PDF iframe — same approach as extension */}
               <iframe
                 src={`${a.ServerRelativeUrl}#toolbar=0&navpanes=0&scrollbar=1`}
                 title={a.FileName}
@@ -455,7 +539,11 @@ const EventForm: React.FC<any> = (props) => {
   // ─── Effects ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!props.event) return;
-    setFormData({ ...props.event });
+    const processedDescription = processEmailMailtoLinks(props.event.description || '');
+    setFormData({
+      ...props.event,
+      description: processedDescription,
+    });
     if (props.event.fAllDayEvent) setIsAllDay(true);
     if (props.event.RecurrenceData) {
       setShowRecurrenceSeriesInfo(true);
@@ -650,141 +738,129 @@ const EventForm: React.FC<any> = (props) => {
   };
 
   // ─── Save ─────────────────────────────────────────────────────────────────────
- const handleSave = async () => {
-  if (props.isNew && !props?.userPermissions?.canAdd) return;
-  if (!props.isNew && !props?.canEditEvent) return;
+  const handleSave = async () => {
+    if (props.isNew && !props?.userPermissions?.canAdd) return;
+    if (!props.isNew && !props?.canEditEvent) return;
 
-  if (formData.endTime < formData.startTime) {
-    setTimeError('End time must be after start time.');
-    return;
-  }
-
-  setSaveError(null);
-
-  try {
-    const eventToSave = { ...formData } as any;
-
-    if (returnedRecurrenceInfo) {
-      eventToSave.RecurrenceData = returnedRecurrenceInfo.recurrenceData;
-    } else if (recurrenceData) {
-      eventToSave.RecurrenceData = recurrenceData;
+    if (formData.endTime < formData.startTime) {
+      setTimeError('End time must be after start time.');
+      return;
     }
 
-    const listItem: any = {
-      Title: eventToSave.title,
-      Location: eventToSave.locations,
-      Description: eventToSave.description,
-      Category: eventToSave.category,
-      fAllDayEvent: isAllDay,
-    };
+    setSaveError(null);
 
-    if (isAllDay) {
-      const dateOnly = moment(eventToSave.startTime).format('YYYY-MM-DD');
-      listItem.EventDate = `${dateOnly}T00:00:00`;
-      listItem.EndDate = `${dateOnly}T23:59:59`;
-      listItem.fAllDayEvent = true;
-    } else {
-      listItem.EventDate = moment(eventToSave.startTime).format('YYYY-MM-DDTHH:mm:ss') + 'Z';
-      listItem.EndDate = moment(eventToSave.endTime).format('YYYY-MM-DDTHH:mm:ss') + 'Z';
-    }
+    try {
+      const eventToSave = { ...formData } as any;
 
-    if (eventToSave.RecurrenceData) {
-      listItem.RecurrenceData = eventToSave.RecurrenceData;
-    }
-
-    let savedItemId: number;
-
-    // ─────────────────────────────────────────
-    // CREATE OR UPDATE EVENT
-    // ─────────────────────────────────────────
-    if (props.isNew) {
-
-      const response = await sp.web.lists
-        .getById(props.MarketingCalendarId)
-        .items.add(listItem);
-
-      savedItemId = response?.Id;
-      console.log('Item added successfully:', savedItemId);
-
-      // 🔴 IMPORTANT: wait for SharePoint commit
-      await new Promise(resolve => setTimeout(resolve, 1200));
-
-    } else {
-
-      savedItemId = parseInt(String(eventToSave.id));
-
-      await sp.web.lists
-        .getById(props.MarketingCalendarId)
-        .items.getById(savedItemId)
-        .update(listItem);
-
-      console.log('Item updated successfully');
-
-    }
-
-    // ─────────────────────────────────────────
-    // ATTACHMENTS
-    // ─────────────────────────────────────────
-    const itemAttachments = sp.web.lists
-      .getById(props.MarketingCalendarId)
-      .items
-      .getById(savedItemId)
-      .attachmentFiles;
-
-    // Delete attachments
-    for (const fileName of attachmentsToDelete) {
-      try {
-        await itemAttachments.getByName(fileName).delete();
-      } catch (e) {
-        console.warn(`Could not delete attachment "${fileName}":`, e);
+      if (returnedRecurrenceInfo) {
+        eventToSave.RecurrenceData = returnedRecurrenceInfo.recurrenceData;
+      } else if (recurrenceData) {
+        eventToSave.RecurrenceData = recurrenceData;
       }
+
+      const listItem: any = {
+        Title: eventToSave.title,
+        Location: eventToSave.locations,
+        Description: eventToSave.description,
+        Category: eventToSave.category,
+        fAllDayEvent: isAllDay,
+      };
+
+      if (isAllDay) {
+        const dateOnly = moment(eventToSave.startTime).format('YYYY-MM-DD');
+        listItem.EventDate = `${dateOnly}T00:00:00`;
+        listItem.EndDate = `${dateOnly}T23:59:59`;
+        listItem.fAllDayEvent = true;
+      } else {
+        listItem.EventDate = moment(eventToSave.startTime).format('YYYY-MM-DDTHH:mm:ss') + 'Z';
+        listItem.EndDate = moment(eventToSave.endTime).format('YYYY-MM-DDTHH:mm:ss') + 'Z';
+      }
+
+      if (eventToSave.RecurrenceData) {
+        listItem.RecurrenceData = eventToSave.RecurrenceData;
+      }
+
+      let savedItemId: number;
+
+      // ─────────────────────────────────────────
+      // CREATE OR UPDATE EVENT
+      // ─────────────────────────────────────────
+      if (props.isNew) {
+        const response = await sp.web.lists
+          .getById(props.MarketingCalendarId)
+          .items.add(listItem);
+
+        savedItemId = response?.Id;
+        console.log('Item added successfully:', savedItemId);
+
+        // wait for SharePoint commit
+        await new Promise(resolve => setTimeout(resolve, 1200));
+      } else {
+        savedItemId = parseInt(String(eventToSave.id));
+
+        await sp.web.lists
+          .getById(props.MarketingCalendarId)
+          .items.getById(savedItemId)
+          .update(listItem);
+
+        console.log('Item updated successfully');
+      }
+
+      // ─────────────────────────────────────────
+      // ATTACHMENTS
+      // ─────────────────────────────────────────
+      const itemAttachments = sp.web.lists
+        .getById(props.MarketingCalendarId)
+        .items
+        .getById(savedItemId)
+        .attachmentFiles;
+
+      // Delete attachments
+      for (const fileName of attachmentsToDelete) {
+        try {
+          await itemAttachments.getByName(fileName).delete();
+        } catch (e) {
+          console.warn(`Could not delete attachment "${fileName}":`, e);
+        }
+      }
+
+      // Upload local file
+      if (pendingLocalFile) {
+        const buffer = await pendingLocalFile.arrayBuffer();
+        await itemAttachments.add(
+          pendingLocalFile.name,
+          buffer
+        );
+        setPendingLocalFile(null);
+      }
+
+      // Upload library selected file
+      if (pendingLibraryBlob) {
+        const buffer = await pendingLibraryBlob.blob.arrayBuffer();
+        await itemAttachments.add(
+          pendingLibraryBlob.name,
+          buffer
+        );
+        setPendingLibraryBlob(null);
+      }
+
+      // Reload attachments
+      const updatedAttachments: IAttachmentInfo[] = await itemAttachments();
+
+      setExistingAttachments(updatedAttachments);
+      setAttachmentsToDelete([]);
+
+      props.onSave({
+        ...eventToSave,
+        id: savedItemId,
+        attachments: updatedAttachments
+      });
+
+    } catch (error) {
+      console.error('Error saving event:', error);
+      setSaveError(parseError(error));
     }
-
-    // Upload local file
-    if (pendingLocalFile) {
-
-      const buffer = await pendingLocalFile.arrayBuffer();
-
-      await itemAttachments.add(
-        pendingLocalFile.name,
-        buffer
-      );
-
-      setPendingLocalFile(null);
-    }
-
-    // Upload library selected file
-    if (pendingLibraryBlob) {
-
-      const buffer = await pendingLibraryBlob.blob.arrayBuffer();
-
-      await itemAttachments.add(
-        pendingLibraryBlob.name,
-        buffer
-      );
-
-      setPendingLibraryBlob(null);
-    }
-
-    // Reload attachments
-    const updatedAttachments: IAttachmentInfo[] = await itemAttachments();
-
-    setExistingAttachments(updatedAttachments);
-    setAttachmentsToDelete([]);
-
-    props.onSave({
-      ...eventToSave,
-      id: savedItemId,
-      attachments: updatedAttachments
-    });
-
-  } catch (error) {
-
-    console.error('Error saving event:', error);
-
-    setSaveError(parseError(error));
-  }
-};
+  };
 
   const handleDelete = (): void => {
     if (formData.id && !props.isNew) props.onDelete(formData.id);
@@ -836,15 +912,16 @@ const EventForm: React.FC<any> = (props) => {
   const pendingLabel = pendingLocalFile
     ? pendingLocalFile.name
     : pendingLibraryBlob
-    ? pendingLibraryBlob.name
-    : null;
+      ? pendingLibraryBlob.name
+      : null;
 
   // ─── Description field ────────────────────────────────────────────────────────
   const renderDescriptionField = () => {
+    const formattedDesc = processEmailMailtoLinks(formData.description || '');
     if (props?.CalendarTitle === 'Company Calendar') {
       return (
         <>
-          <RichText value={formData.description} onChange={handleRichTextChange} isEditMode={true} />
+          <RichText value={formattedDesc} onChange={handleRichTextChange} isEditMode={true} />
           {errors.description && (
             <Text variant="small" style={{ color: '#d13438' }}>{errors.description}</Text>
           )}
@@ -855,7 +932,7 @@ const EventForm: React.FC<any> = (props) => {
       <TextField
         multiline
         rows={3}
-        value={formData.description}
+        value={formattedDesc}
         onChange={(_, value) => handleInputChange('description', value)}
         styles={{ fieldGroup: { borderRadius: 4 } }}
       />
@@ -863,39 +940,37 @@ const EventForm: React.FC<any> = (props) => {
   };
 
   // ─── Footer: Preview (left) + Save / Delete / Cancel (right) ─────────────────
-
-  // ADD THIS — resolves bg/fg for any category, mirrors ModernCalendar's maps exactly
-const categoryOptionsColor: Record<string, string> = {
-  'Meeting': '#3174ad', 'RFQ': '#ffff00', 'RFP': '#107c10',
-  'CSP/Traditional': '#da3b01', 'DB': '#c239b3', 'Interview': '#adadad',
-  'Appointment': '#0099bc', 'Site Visit': '#00b294', 'Remote': '#004e8c',
-  'Interview Prep': '#ffaa44', 'Other': '#605e5c', 'PTO': '#e3008c',
-  'N/A': '#605e5c',
-};
-const categoryOptionsFontColor: Record<string, string> = {
-  'Meeting': '#ffffff', 'RFQ': '#000000', 'RFP': '#ffffff',
-  'CSP/Traditional': '#ffffff', 'DB': '#ffffff', 'Interview': '#000000',
-  'Appointment': '#ffffff', 'Site Visit': '#000000', 'Remote': '#ffffff',
-  'Interview Prep': '#000000', 'Other': '#ffffff', 'PTO': '#ffffff',
-  'N/A': '#ffffff',
-};
-const categoryOptionsColorTraining: Record<string, string> = {
-  'Safety': '#ff0000', 'Ops': '#3174ad', 'Other': '#ffff00',
-  'Vaughn Outdoors': '#8b4513', 'VaughnLife': '#107c10', 'HR': '#ff8c00',
-  'N/A': '#605e5c',
-};
-const categoryOptionsFontColorTraining: Record<string, string> = {
-  'Safety': '#ffffff', 'Ops': '#ffffff', 'Other': '#000000',
-  'Vaughn Outdoors': '#ffffff', 'VaughnLife': '#ffffff', 'HR': '#ffffff',
-  'N/A': '#ffffff',
-};
-const isTrainingCalendar = props?.CalendarTitle === 'Company Calendar';
-const resolvedCategoryBg = isTrainingCalendar
-  ? (categoryOptionsColorTraining[formData.category] ?? '#605e5c')
-  : (categoryOptionsColor[formData.category] ?? '#605e5c');
-const resolvedCategoryFg = isTrainingCalendar
-  ? (categoryOptionsFontColorTraining[formData.category] ?? '#ffffff')
-  : (categoryOptionsFontColor[formData.category] ?? '#ffffff');
+  const categoryOptionsColor: Record<string, string> = {
+    'Meeting': '#3174ad', 'RFQ': '#ffff00', 'RFP': '#107c10',
+    'CSP/Traditional': '#da3b01', 'DB': '#c239b3', 'Interview': '#adadad',
+    'Appointment': '#0099bc', 'Site Visit': '#00b294', 'Remote': '#004e8c',
+    'Interview Prep': '#ffaa44', 'Other': '#605e5c', 'PTO': '#e3008c',
+    'N/A': '#605e5c',
+  };
+  const categoryOptionsFontColor: Record<string, string> = {
+    'Meeting': '#ffffff', 'RFQ': '#000000', 'RFP': '#ffffff',
+    'CSP/Traditional': '#ffffff', 'DB': '#ffffff', 'Interview': '#000000',
+    'Appointment': '#ffffff', 'Site Visit': '#000000', 'Remote': '#ffffff',
+    'Interview Prep': '#000000', 'Other': '#ffffff', 'PTO': '#ffffff',
+    'N/A': '#ffffff',
+  };
+  const categoryOptionsColorTraining: Record<string, string> = {
+    'Safety': '#ff0000', 'Ops': '#3174ad', 'Other': '#ffff00',
+    'Vaughn Outdoors': '#8b4513', 'VaughnLife': '#107c10', 'HR': '#ff8c00',
+    'N/A': '#605e5c',
+  };
+  const categoryOptionsFontColorTraining: Record<string, string> = {
+    'Safety': '#ffffff', 'Ops': '#ffffff', 'Other': '#000000',
+    'Vaughn Outdoors': '#ffffff', 'VaughnLife': '#ffffff', 'HR': '#ffffff',
+    'N/A': '#ffffff',
+  };
+  const isTrainingCalendar = props?.CalendarTitle === 'Company Calendar';
+  const resolvedCategoryBg = isTrainingCalendar
+    ? (categoryOptionsColorTraining[formData.category] ?? '#605e5c')
+    : (categoryOptionsColor[formData.category] ?? '#605e5c');
+  const resolvedCategoryFg = isTrainingCalendar
+    ? (categoryOptionsFontColorTraining[formData.category] ?? '#ffffff')
+    : (categoryOptionsFontColor[formData.category] ?? '#ffffff');
   const renderFooterContent = () => (
     <Stack
       horizontal
@@ -931,13 +1006,14 @@ const resolvedCategoryFg = isTrainingCalendar
   if (!canEdit && !props.isNew) {
     const viewEvent = formData.id ? formData : props.event;
     if (!viewEvent) return null;
-     return (
+    return (
       <EventViewDialog
         event={viewEvent}
         attachments={existingAttachments}
         onClose={props.onCancel}
         categoryBg={resolvedCategoryBg}
         categoryFg={resolvedCategoryFg}
+        serviceScope={props.Context?.serviceScope}
       />
     );
   }
@@ -945,7 +1021,6 @@ const resolvedCategoryFg = isTrainingCalendar
   // ─── Edit Panel ───────────────────────────────────────────────────────────────
   return (
     <>
-    {/*  */}
       <Panel
         isBlocking={false}
         isOpen={true}
@@ -1152,27 +1227,23 @@ const resolvedCategoryFg = isTrainingCalendar
             )}
 
             <Stack horizontal tokens={{ childrenGap: 8 }} wrap verticalAlign="center">
-                <Stack.Item grow={1}>
-<DefaultButton
-                text="Select from Memos Library"
-                iconProps={{ iconName: 'PDF' }}
-                onClick={() => setIsPdfPickerOpen(true)}
-                styles={{ root: { borderRadius: 4 } }}
-              />
-                </Stack.Item>
-                  <Stack.Item grow={1}>
-<Label styles={{ root: { margin: 0, whiteSpace: 'nowrap' } }}>Upload from computer:</Label>
+              <Stack.Item grow={1}>
+                <DefaultButton
+                  text="Select from Memos Library"
+                  iconProps={{ iconName: 'PDF' }}
+                  onClick={() => setIsPdfPickerOpen(true)}
+                  styles={{ root: { borderRadius: 4 } }}
+                />
+              </Stack.Item>
+              <Stack.Item grow={1}>
+                <Label styles={{ root: { margin: 0, whiteSpace: 'nowrap' } }}>Upload from computer:</Label>
                 <input
                   type="file"
                   accept="application/pdf"
                   onChange={(e) => handleLocalPdfFileChange(e.target.files)}
                   style={{ fontSize: 13 }}
                 />
-                  </Stack.Item>
-              
-              {/* <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 6 }}>
-                
-              </Stack> */}
+              </Stack.Item>
             </Stack>
           </Stack>
 
@@ -1233,14 +1304,17 @@ const resolvedCategoryFg = isTrainingCalendar
       </Panel>
 
       {/* ─── Preview Dialog — opened from edit form ──────────────────────────── */}
-       {isPreviewOpen && (
+      {isPreviewOpen && (
         <EventViewDialog
-          event={{ ...formData, fAllDayEvent: isAllDay,
-            RecurrenceData: returnedRecurrenceInfo?.recurrenceData || recurrenceData || formData.RecurrenceData }}
+          event={{
+            ...formData, fAllDayEvent: isAllDay,
+            RecurrenceData: returnedRecurrenceInfo?.recurrenceData || recurrenceData || formData.RecurrenceData
+          }}
           attachments={existingAttachments}
           onClose={() => setIsPreviewOpen(false)}
           categoryBg={resolvedCategoryBg}
           categoryFg={resolvedCategoryFg}
+          serviceScope={props.Context?.serviceScope}
         />
       )}
       {/* ─── PDF Library Picker Panel ─────────────────────────────────────────── */}
