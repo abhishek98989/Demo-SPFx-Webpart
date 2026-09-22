@@ -6,5 +6,7 @@ export interface IWeeklyWordsProps {
   context: any;
   ListId: string;
   userDisplayName: string;
-    siteUrl: string;
+  siteUrl: string;
+  viewMode: string; // 'currentPost' | 'archive'
+  title: string;
 }

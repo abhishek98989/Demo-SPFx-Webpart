@@ -21,9 +21,10 @@ interface IWeeklyWordsProps {
     listId: string;
     siteUrl: string;
     context: any; // SharePoint context
+    title: string;
 }
 
-export const WeeklyWordsPost: React.FC<IWeeklyWordsProps> = ({ listId, context, siteUrl }) => {
+export const WeeklyWordsPost: React.FC<IWeeklyWordsProps> = ({ listId, context, siteUrl, title }) => {
     const [article, setArticle] = useState<IArticleItem | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -220,7 +221,7 @@ export const WeeklyWordsPost: React.FC<IWeeklyWordsProps> = ({ listId, context, 
          <div style={containerStyle} className='WeeklyWordsPost'>
             <h2 style={{ textAlign: "justify" }} className="ms-webpart-titleText">
                 <span style={{ whiteSpace: "nowrap" }}>
-                    <span>Weekly Words from Westpark</span>
+                    <span>{title || 'Weekly Words from Westpark'}</span>
                     <span id="WebPartCaptionWPQ5" />
                 </span>
             </h2>

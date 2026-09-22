@@ -3,7 +3,8 @@ import * as ReactDom from 'react-dom';
 import { Version } from '@microsoft/sp-core-library';
 import {
   type IPropertyPaneConfiguration,
-  PropertyPaneTextField
+  PropertyPaneTextField,
+  PropertyPaneDropdown
 } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
@@ -15,7 +16,9 @@ import { IWeeklyWordsProps } from './components/IWeeklyWordsProps';
 export interface IWeeklyWordsWebPartProps {
   description: string;
   ListId: string;
-    siteUrl: string;
+  siteUrl: string;
+  viewMode: string; // 'currentPost' | 'archive'
+  title: string;
 }
 
 export default class WeeklyWordsWebPart extends BaseClientSideWebPart<IWeeklyWordsWebPartProps> {
@@ -34,9 +37,9 @@ export default class WeeklyWordsWebPart extends BaseClientSideWebPart<IWeeklyWor
         userDisplayName: this.context.pageContext.user.displayName,
         context: this.context,
         ListId: this.properties.ListId,
-        siteUrl: this.properties.siteUrl
-
-        
+        siteUrl: this.properties.siteUrl,
+        viewMode: this.properties.viewMode || 'currentPost',
+        title: this.properties.title || 'Weekly Words from Westpark'
       }
     );
 
@@ -118,11 +121,23 @@ export default class WeeklyWordsWebPart extends BaseClientSideWebPart<IWeeklyWor
                 PropertyPaneTextField('description', {
                   label: strings.DescriptionFieldLabel
                 }),
+                PropertyPaneTextField('title', {
+                  label: 'Webpart Title',
+                  placeholder: 'Weekly Words from Westpark'
+                }),
                 PropertyPaneTextField('ListId', {
                   label: 'List Id'
                 }),
-                    PropertyPaneTextField('siteUrl', {
+                PropertyPaneTextField('siteUrl', {
                   label: 'Site URL'
+                }),
+                PropertyPaneDropdown('viewMode', {
+                  label: 'View Mode',
+                  options: [
+                    { key: 'currentPost', text: 'Current Post View' },
+                    { key: 'archive', text: 'Archive View' }
+                  ],
+                  selectedKey: this.properties.viewMode || 'currentPost'
                 })
               ]
             }

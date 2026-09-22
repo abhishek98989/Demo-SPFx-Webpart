@@ -4,7 +4,7 @@ import { spfi, SPFx } from "@pnp/sp";
 import "@pnp/sp/webs";
 import "@pnp/sp/lists";
 import "@pnp/sp/items";
-import { Dropdown, IDropdownOption } from "@fluentui/react/lib/Dropdown";
+import { ComboBox, IComboBox, IComboBoxOption } from "@fluentui/react/lib/ComboBox";
 import SharePointBanners from '../../../globalCommon/Banners';
 
 interface IArticleItem {
@@ -25,6 +25,7 @@ export const WeeklyWordsPostDropdown: React.FC<any> = ({ listId, context, siteUr
   const [selectedArticle, setSelectedArticle] = useState<IArticleItem | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterText, setFilterText] = useState<string>('');
 
   const sp = siteUrl != undefined
     ? spfi(siteUrl).using(SPFx(context))
@@ -43,11 +44,7 @@ export const WeeklyWordsPostDropdown: React.FC<any> = ({ listId, context, siteUr
       setLoading(true);
       setError(null);
 
-      const today = new Date();
-      today.setHours(23, 59, 59, 999);
-      const todayISO = today.toISOString();
-
-      // Fetch all latest approved articles (<= today) ordered by ArticleDate desc
+      // Fetch ALL approved articles, ordered by ArticleDate desc
       const items = await sp.web.lists
         .getById(listId)
         .items
@@ -60,7 +57,9 @@ export const WeeklyWordsPostDropdown: React.FC<any> = ({ listId, context, siteUr
           "OData__ModerationStatus"
         )
         .expand("PublishingContact")
-        .orderBy("ArticleDate", false)(); // newest first
+        .filter(`OData__ModerationStatus eq 0`)
+        .orderBy("ArticleDate", false)
+        .top(5000)(); // fetch all items
 
       if (items && items.length > 0) {
         const typedItems = items as IArticleItem[];
@@ -177,22 +176,26 @@ export const WeeklyWordsPostDropdown: React.FC<any> = ({ listId, context, siteUr
   `;
 
   const onArticleChange = (
-    event: React.FormEvent<HTMLDivElement>,
-    option?: IDropdownOption
+    _event: React.FormEvent<IComboBox>,
+    option?: IComboBoxOption
   ): void => {
     if (!option) return;
     const selectedId = option.key as number;
     const found = articles.find(a => a.Id === selectedId) || null;
     setSelectedArticle(found);
+    setFilterText(''); // clear filter after selection
   };
 
-  const dropdownOptions: IDropdownOption[] = articles.map(article => {
+  const onInputValueChange = (value?: string): void => {
+    setFilterText(value || '');
+  };
+
+  const allComboBoxOptions: IComboBoxOption[] = articles.map(article => {
     let label = article.Title;
     try {
       const { date } = formatDateTime(article.ArticleDate);
-      label = `${date} - ${article.Title}`;
+      label = `${date} — ${article.Title}`;
     } catch {
-      // fallback to title only if date is invalid
       label = article.Title;
     }
     return {
@@ -200,6 +203,13 @@ export const WeeklyWordsPostDropdown: React.FC<any> = ({ listId, context, siteUr
       text: label
     };
   });
+
+  // Filter options by typed text (case-insensitive substring match)
+  const filteredOptions: IComboBoxOption[] = filterText
+    ? allComboBoxOptions.filter(opt =>
+        opt.text.toLowerCase().indexOf(filterText.toLowerCase()) !== -1
+      )
+    : allComboBoxOptions;
 
   if (loading) {
     return (
@@ -256,14 +266,24 @@ export const WeeklyWordsPostDropdown: React.FC<any> = ({ listId, context, siteUr
           </span>
         </h2>
 
-        {/* NEW: Dropdown to select article */}
-        <div style={{ marginBottom: '16px', maxWidth: '500px' }}>
-          <Dropdown
-            placeholder="Select an article"
+        {/* Searchable ComboBox to select article */}
+        <div style={{ marginBottom: '16px', maxWidth: '600px' }}>
+          <ComboBox
+            placeholder="Search or select a post..."
             label="Weekly Words posts"
-            options={dropdownOptions}
+            options={filteredOptions}
             selectedKey={selectedArticle.Id}
             onChange={onArticleChange}
+            onInputValueChange={onInputValueChange}
+            allowFreeform
+            autoComplete="off"
+            useComboBoxAsMenuWidth
+            text={filterText || undefined}
+            styles={{
+              root: { width: '100%' },
+              input: { fontSize: '14px' },
+              optionsContainerWrapper: { maxHeight: '400px' }
+            }}
           />
         </div>
 

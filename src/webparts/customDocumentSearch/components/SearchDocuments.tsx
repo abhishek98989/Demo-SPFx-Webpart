@@ -101,15 +101,30 @@ const buildGraphQueryString = (text: string, mode: Mode) => {
   return words.join(" OR ");
 };
 
+/** Strip all HTML tags from a string, returning plain text only.
+ * Used to sanitize Title values that may contain SharePoint HitHighlighted markup
+ * before running the highlight() regex (which would otherwise match inside HTML attributes).
+ */
+const stripHtml = (html: string): string => {
+  if (!html) return "";
+  // Remove any SharePoint highlight tokens (<c0>, </c0>, <ddd/>, etc.)
+  // then strip any remaining HTML tags.
+  return html
+    .replace(/<c\d+>|<\/c\d+>|<ddd\/>/gi, "")
+    .replace(/<[^>]*>/g, "")
+    .trim();
+};
+
 const highlight = (text: string, words: string[]) => {
   if (!text) return "";
-  let newText = text;
-  words.forEach((w) => {
-    if (!w) return;
-    const reg = new RegExp(`(${w})`, "gi");
-    newText = newText.replace(reg, `<mark style="background:yellow">$1</mark>`);
-  });
-  return newText;
+  const escaped = words
+    .filter(Boolean)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (escaped.length === 0) return text;
+  // Single pass over the plain text so a later word (e.g. a short letter like "c")
+  // can't match inside the <mark> tags a previous word already inserted.
+  const reg = new RegExp(`(${escaped.join("|")})`, "gi");
+  return text.replace(reg, `<mark style="background:yellow">$1</mark>`);
 };
 
 const normalizeGuid = (g?: string) =>
@@ -1207,7 +1222,7 @@ const SearchDocuments: React.FC<ISearchDocumentsProps> = ({
           const items: ISearchResult[] = (
             res.PrimarySearchResults || []
           ).map((i: any) => ({
-            Title: i.Title || "",
+            Title: stripHtml(i.Title || ""),
             Filename: i.Filename || "",
             Path: i.Path,
             OriginalPath: i.OriginalPath,
@@ -2379,7 +2394,7 @@ const SearchDocuments: React.FC<ISearchDocumentsProps> = ({
                             minWidth: 0,
                           }}
                           dangerouslySetInnerHTML={{
-                            __html: highlight(displayTitle, words),
+                            __html: highlight(stripHtml(displayTitle), words),
                           }}
                         />
                         {isTooltipSource && (
